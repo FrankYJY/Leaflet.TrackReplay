@@ -1,0 +1,108 @@
+/*
+ * Leaflet.TrackReplay default styles
+ */
+
+/* ---- Control container ------------------------------------------------ */
+.leaflet-trackreplay-control {
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---- Buttons ---------------------------------------------------------- */
+.leaflet-trackreplay-btn {
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+  text-align: center;
+  text-decoration: none;
+  color: #333;
+  background: #fff;
+  border-radius: 3px;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease;
+}
+
+.leaflet-trackreplay-btn:hover {
+  background: #f0f0f0;
+  border-color: #ccc;
+}
+
+.leaflet-trackreplay-btn:active {
+  background: #e0e0e0;
+}
+
+/* Play button (▶) */
+.leaflet-trackreplay-play::before {
+  content: '\25B6'; /* ▶ */
+}
+
+/* Pause state (⏸) */
+.leaflet-trackreplay-play.leaflet-trackreplay-pause::before {
+  content: '\23F8'; /* ⏸ */
+}
+
+/* Stop button (⏹) */
+.leaflet-trackreplay-stop::before {
+  content: '\23F9'; /* ⏹ */
+}
+
+/* ---- Progress bar ----------------------------------------------------- */
+.leaflet-trackreplay-progress-wrap {
+  width: 80px;
+  height: 8px;
+  background: #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.leaflet-trackreplay-progress-bar {
+  width: 0%;
+  height: 100%;
+  background: #3388ff;
+  border-radius: 4px;
+  transition: width 0.15s linear;
+}
+
+/* ---- Speed label ------------------------------------------------------ */
+.leaflet-trackreplay-speed {
+  font-size: 11px;
+  color: #666;
+  min-width: 28px;
+  text-align: center;
+  user-select: none;
+}
+
+/* ---- Moving marker (default divIcon) ---------------------------------- */
+.leaflet-trackreplay-marker {
+  width: 12px;
+  height: 12px;
+  background: #3388ff;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+  /* Arrow shape — override in your own CSS to customize */
+}
+
+/* Optional: direction arrow using CSS transform (when autoRotate: true) */
+.leaflet-trackreplay-marker::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  margin-left: -3px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 6px solid #3388ff;
+}

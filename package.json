@@ -1,0 +1,52 @@
+{
+  "name": "leaflet-trackreplay",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A Leaflet plugin for replaying GPS tracks with playback controls and customizable animations.",
+  "main": "dist/leaflet-trackreplay.cjs.js",
+  "module": "dist/leaflet-trackreplay.esm.js",
+  "unpkg": "dist/leaflet-trackreplay.iife.js",
+  "jsdelivr": "dist/leaflet-trackreplay.iife.js",
+  "style": "dist/leaflet-trackreplay.css",
+  "files": [
+    "dist/",
+    "src/"
+  ],
+  "scripts": {
+    "build": "rollup -c && cp src/Leaflet.TrackReplay.css dist/leaflet-trackreplay.css",
+    "dev": "rollup -c -w",
+    "lint": "eslint src/",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FrankYJY/Leaflet.TrackReplay.git"
+  },
+  "keywords": [
+    "leaflet",
+    "plugin",
+    "track",
+    "replay",
+    "gps",
+    "animation",
+    "route",
+    "playback",
+    "map"
+  ],
+  "author": "Frank Yao",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/FrankYJY/Leaflet.TrackReplay/issues"
+  },
+  "homepage": "https://github.com/FrankYJY/Leaflet.TrackReplay#readme",
+  "peerDependencies": {
+    "leaflet": "^1.7.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-buble": "^1.0.0",
+    "@rollup/plugin-terser": "^0.4.0",
+    "eslint": "^8.50.0",
+    "playwright": "^1.61.1",
+    "rollup": "^4.0.0"
+  }
+}
