@@ -27,6 +27,7 @@ import { createControlBar } from './controls/ControlBar.js';
 import { createViewFollowControl } from './controls/ViewFollowControl.js';
 import { createColorLegend } from './controls/ColorLegend.js';
 import { createElementToggles } from './controls/ElementToggles.js';
+import { createInfoLabels } from './controls/InfoLabels.js';
 
 /**
  * Main TrackReplay orchestrator.
@@ -65,6 +66,11 @@ import { createElementToggles } from './controls/ElementToggles.js';
  *        (one tri-state checkbox per element type, across all objects)
  * @param {string} [options.elementTogglesPosition='topright'] - control corner
  * @param {string} [options.elementTogglesTitle='Batch']  - toggles control title
+ * @param {boolean} [options.showInfoLabels=true]   - batch label display control
+ *        (rows = objects, columns = element types; batch-opens the layers'
+ *        existing popups — the same popups a click shows)
+ * @param {string} [options.infoLabelsPosition='topright'] - label control corner
+ * @param {string} [options.infoLabelsTitle='Labels'] - label control title
  * @returns {L.TrackReplay}
  */
 export function trackReplay(map, featureCollection, options) {
@@ -203,6 +209,7 @@ export function trackReplay(map, featureCollection, options) {
     layerGroups[key] = group;
     allLayers[key] = {
       group: group,
+      layerPath: entry.layerPath,
       elements: elements,
       trackLayer: trackLayer,
       pointLayer: pointLayer,
@@ -317,6 +324,21 @@ export function trackReplay(map, featureCollection, options) {
     }
   }
 
+  // ---- 7c. Batch label display (rows = objects, columns = element types) ----
+  // Checking a cell batch-opens that element's existing popups — the very same
+  // popups a manual click shows.
+  var infoLabels = null;
+  if (options.showInfoLabels !== false) {
+    var labelsControl = createInfoLabels(allLayers, {
+      position: options.infoLabelsPosition || 'topright',
+      title: options.infoLabelsTitle || 'Labels',
+    });
+    if (labelsControl.hasContent) {
+      infoLabels = labelsControl;
+      map.addControl(infoLabels);
+    }
+  }
+
   // ---- 8. View Follow ----
   var viewFollow = null;
   if (options.showViewFollow !== false) {
@@ -428,6 +450,7 @@ export function trackReplay(map, featureCollection, options) {
     viewFollow: viewFollow,
     layerControl: layerControl,
     elementToggles: elementToggles,
+    infoLabels: infoLabels,
     controls: controls,
     timeline: timeline,
     controlBar: controlBar,
@@ -523,6 +546,9 @@ export function trackReplay(map, featureCollection, options) {
       if (elementToggles && elementToggles._map) {
         map.removeControl(elementToggles);
       }
+      if (infoLabels && infoLabels._map) {
+        map.removeControl(infoLabels);
+      }
       if (viewFollow) {
         if (viewFollow.control._map) {
           map.removeControl(viewFollow.control);
@@ -567,6 +593,7 @@ if (typeof L !== 'undefined') {
     ViewFollowControl: { createViewFollowControl: createViewFollowControl },
     ColorLegend: { createColorLegend: createColorLegend },
     ElementToggles: { createElementToggles: createElementToggles },
+    InfoLabels: { createInfoLabels: createInfoLabels },
   };
 
   // Factory function

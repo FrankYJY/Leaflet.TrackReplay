@@ -280,6 +280,59 @@
   font-size: 11px;
 }
 
+/* ---- Batch label display control (rows = objects, cols = element types) ---- */
+.leaflet-trackreplay-infolabels {
+  background: #fff;
+  padding: 6px 8px;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  max-width: 280px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.leaflet-trackreplay-infolabels .tr-il-title {
+  font-weight: bold;
+  color: #333;
+  cursor: pointer;
+  user-select: none;
+}
+
+.leaflet-trackreplay-infolabels.tr-il-expanded .tr-il-title {
+  border-bottom: 1px solid #eee;
+  padding-bottom: 3px;
+  margin-bottom: 4px;
+}
+
+.leaflet-trackreplay-infolabels .tr-il-table {
+  border-collapse: collapse;
+}
+
+.leaflet-trackreplay-infolabels th,
+.leaflet-trackreplay-infolabels td {
+  padding: 2px 5px;
+  font-size: 11px;
+  font-weight: normal;
+  color: #555;
+  white-space: nowrap;
+}
+
+.leaflet-trackreplay-infolabels .tr-il-colhead,
+.leaflet-trackreplay-infolabels .tr-il-cell {
+  text-align: center;
+}
+
+.leaflet-trackreplay-infolabels .tr-il-rowhead {
+  text-align: left;
+  cursor: pointer;
+  color: #333;
+}
+
+.leaflet-trackreplay-infolabels .tr-il-cell-empty {
+  color: #ddd;
+}
+
 /* ---- Moving Indicator ---- */
 .leaflet-trackreplay-indicator,
 .leaflet-trackreplay-indicator.leaflet-interactive {

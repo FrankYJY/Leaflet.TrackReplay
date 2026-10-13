@@ -19,6 +19,8 @@
 - ⏱️ **Editable timeline** — double-click to type a timestamp and jump
 - 🔌 **Decoupled architecture** — use the core engine + individual layers independently
 - 💬 **Popups** — per-segment popups on track segments and points, plus static-feature popups
+- 🏷️ **Batch label display** — open any object's or element type's popups in bulk (they *are* the
+  real popups, not look-alikes)
 - 📡 **Event system** — `start`, `pause`, `stop`, `finished`, `tick`, `timechange`, `speedchange`
 
 ## Installation
@@ -114,6 +116,9 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `showElementToggles` | `boolean` | `true` | Show the batch control (one tri-state checkbox per element type, across all objects) |
 | `elementTogglesPosition` | `string` | `'topright'` | Corner for the batch control |
 | `elementTogglesTitle` | `string` | `'Batch'` | Title of the batch control |
+| `showInfoLabels` | `boolean` | `true` | Batch label display control — batch-opens the objects' existing popups (see below) |
+| `infoLabelsPosition` | `string` | `'topright'` | Corner of the label control |
+| `infoLabelsTitle` | `string` | `'Labels'` | Title of the label control |
 
 #### Per-element layers
 
@@ -269,6 +274,38 @@ Point features render as **rings**: an unfilled `L.circleMarker` whose radius is
 - Geographic rings (radius in meters) or ring *bands* (polygon with an inner ring, folium's donut
   technique) already work through the plain GeoJSON path — a `Polygon` with two coordinate rings
   renders as a donut today.
+
+### Batch label display
+
+A collapsed-by-default control (`showInfoLabels`) for **batch-displaying labels** — useful when
+watching one or a few objects closely and you want their nodes/events/segments readable without
+clicking each one:
+
+```
+批量标签 (122)          ← click the title to expand; (n) = labels currently displayed
+            轨迹  节点  事件  静态
+☑ visitor › Bee   ☐   ☑    ☑
+☑ visitor › Mark  ☑   ☐    ☑
+☐ zones › study_area             ☐
+```
+
+- **Rows = objects, columns = element types** that carry label content (the columns come from the
+  data; visual-only elements such as the traveled route or the indicator have none).
+- A label **is the real popup**: checking a cell calls `openPopup()` on every layer of that group,
+  so what appears is the same popup a manual click would show — same content, same styling — and
+  unchecking closes them. Nothing is copied or abbreviated.
+- Clicking a **row header** switches the whole row (tri-state: all / partial / none); the title
+  shows how many labels are currently displayed.
+- While displayed, those popups are put in a "many at once" mode (`autoClose: false`,
+  `autoPan: false`, `closeOnClick: false`): they don't close each other, opening dozens never moves
+  the map, and clicking the map doesn't sweep them away. Switching a cell off restores the normal
+  popup behaviour, so hand-clicked popups still work as usual.
+- Labels **ride along with their layers**: hiding an element (layer tree or batch control) hides its
+  labels too, and they return with the layer. This also covers points that cluster in and out while
+  zooming.
+- Rendering cost scales with the number of *checked cells*, not with the number of objects in the
+  data — safe for hundreds of tracks as long as few rows are switched on. At low zoom, expect
+  overlap — that's inherent to showing many popups at once; zoom in or enable fewer rows.
 
 ### Speed → colour mapping
 

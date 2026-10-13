@@ -1,0 +1,293 @@
+/**
+ * InfoLabels — batch label display control.
+ *
+ * A table with one row per object and one column per element type that carries
+ * label content (track segments, points, events, static features, …). Checking
+ * a cell — or clicking the row header for the whole row — batch-displays that
+ * group's labels; unchecking hides them again.
+ *
+ * A "label" is not a copy or an abbreviation of anything: the control simply
+ * opens the **existing popups** bound to the layers — the very same popup a
+ * manual click shows — so what is displayed in bulk is exactly the popup
+ * content, with popup styling.
+ *
+ * Mechanics (verified against Leaflet 1.9):
+ * - popups of labelled layers get `autoClose: false` (so they don't close each
+ *   other), `autoPan: false` (so opening dozens never moves the map) and
+ *   `closeOnClick: false` (Leaflet fires a synthetic `preclick` before every
+ *   map click and closes popups on it via the map's `closePopupOnClick`);
+ *   all three are restored when the cell is switched off;
+ * - `layer.openPopup()` anchors on the layer's centre (`Path.getCenter()` for
+ *   segments, the point itself for markers) and is a no-op while the layer is
+ *   off the map;
+ * - Leaflet does NOT close a popup when its layer leaves the map, so a
+ *   `layeradd`/`layerremove` hook opens/closes labels together with element
+ *   visibility (which also handles points that cluster in and out on zoom).
+ */
+
+/**
+ * Collect the labelable leaf layers of an element layer together with their
+ * bound popups.
+ *
+ * @param {L.Layer} elementLayer
+ * @returns {Array<{ layer: L.Layer, popup: L.Popup }>}
+ */
+function collectLabelTargets(elementLayer) {
+  var targets = [];
+  if (!elementLayer || typeof elementLayer.eachLayer !== 'function') { return targets; }
+
+  elementLayer.eachLayer(function (layer) {
+    if (typeof layer.getPopup !== 'function') { return; }
+    var popup = layer.getPopup();
+    if (popup) {
+      targets.push({ layer: layer, popup: popup });
+    }
+  });
+
+  return targets;
+}
+
+/**
+ * Create the batch label display control (collapsed by default).
+ *
+ * @param {Object} allLayers - key → { layerPath, elements: [{ key, label, layer }] }
+ * @param {Object} [options]
+ * @param {string} [options.position='topright']
+ * @param {string} [options.title='Labels']
+ * @returns {L.Control} `control._rows` / `control._columns` expose the table model
+ */
+export function createInfoLabels(allLayers, options) {
+  options = options || {};
+
+  // ---- table model ----
+  var rows = [];
+  var columns = [];
+  var seenColumn = {};
+
+  var owners = Object.keys(allLayers || {});
+  for (var i = 0; i < owners.length; i++) {
+    var owner = allLayers[owners[i]];
+    var elements = (owner && owner.elements) || [];
+    var row = {
+      key: owners[i],
+      label: (owner && owner.layerPath ? owner.layerPath : owners[i].split('/')).join(' › '),
+      cells: {},
+    };
+
+    for (var j = 0; j < elements.length; j++) {
+      var element = elements[j];
+      var targets = collectLabelTargets(element.layer);
+      if (!targets.length) { continue; }
+
+      row.cells[element.key] = { label: element.label, targets: targets };
+      if (!seenColumn[element.key]) {
+        seenColumn[element.key] = { key: element.key, label: element.label };
+        columns.push(seenColumn[element.key]);
+      }
+    }
+    rows.push(row);
+  }
+
+  var InfoLabelsControl = L.Control.extend({
+    options: {
+      position: options.position || 'topright',
+    },
+
+    onAdd: function (map) {
+      var self = this;
+
+      this._map = map;
+      this._state = {};        // rowKey → { elementKey: true }
+      this._activeLabels = 0;  // number of currently open popups
+      this._targetIndex = {};  // L.stamp(layer) → { rowKey, elementKey }
+
+      var container = L.DomUtil.create('div', 'leaflet-trackreplay-infolabels');
+
+      this._titleEl = L.DomUtil.create('div', 'tr-il-title', container);
+      this._titleEl.onclick = function () { self._toggleExpanded(); };
+
+      var table = L.DomUtil.create('table', 'tr-il-table', container);
+      table.style.display = 'none';
+      this._tableEl = table;
+
+      // header: one column per element type (headers are labels, not controls)
+      var thead = L.DomUtil.create('thead', '', table);
+      var headRow = L.DomUtil.create('tr', '', thead);
+      L.DomUtil.create('th', 'tr-il-rowhead', headRow);
+      for (var c = 0; c < columns.length; c++) {
+        var th = L.DomUtil.create('th', 'tr-il-colhead', headRow);
+        th.textContent = columns[c].label;
+      }
+
+      // one row per object
+      var tbody = L.DomUtil.create('tbody', '', table);
+      for (var r = 0; r < rows.length; r++) {
+        this._buildRow(tbody, rows[r]);
+      }
+
+      // Leaflet never closes a popup when its layer leaves the map, so keep
+      // labels in sync with element visibility (this also covers points that
+      // cluster in and out while zooming)
+      this._onLayerChange = function (e) {
+        var entry = self._targetIndex[L.stamp(e.layer)];
+        if (!entry) { return; }
+        if (e.type === 'layeradd') {
+          if (self._state[entry.rowKey][entry.elementKey]) {
+            e.layer.openPopup();
+          }
+        } else {
+          e.layer.closePopup();
+        }
+      };
+      map.on('layeradd layerremove', this._onLayerChange);
+
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+
+      this._updateTitle();
+      return container;
+    },
+
+    onRemove: function (map) {
+      map.off('layeradd layerremove', this._onLayerChange);
+    },
+
+    /** Build one table row (row header + one checkbox per available column). */
+    _buildRow: function (tbody, row) {
+      var self = this;
+      this._state[row.key] = {};
+
+      var tr = L.DomUtil.create('tr', 'tr-il-row', tbody);
+
+      // row header — click to switch the whole row
+      var head = L.DomUtil.create('td', 'tr-il-rowhead', tr);
+      var rowCheck = L.DomUtil.create('input', 'tr-il-rowcheck', head);
+      rowCheck.type = 'checkbox';
+      head.appendChild(document.createTextNode(' ' + row.label));
+
+      head.onclick = function (e) {
+        if (e.target === rowCheck) { return; }
+        rowCheck.checked = !rowCheck.checked;
+        self._setRow(row, tr, rowCheck.checked);
+      };
+      rowCheck.onclick = function (e) {
+        e.stopPropagation();
+        self._setRow(row, tr, rowCheck.checked);
+      };
+      tr._rowCheckbox = rowCheck;
+
+      for (var c = 0; c < columns.length; c++) {
+        var colKey = columns[c].key;
+        var td = L.DomUtil.create('td', 'tr-il-cell', tr);
+
+        if (!row.cells[colKey]) {
+          L.DomUtil.addClass(td, 'tr-il-cell-empty');
+          continue;
+        }
+
+        var box = L.DomUtil.create('input', '', td);
+        box.type = 'checkbox';
+
+        // index this cell's layers for the layeradd/layerremove hook
+        var cell = row.cells[colKey];
+        for (var t = 0; t < cell.targets.length; t++) {
+          this._targetIndex[L.stamp(cell.targets[t].layer)] = {
+            rowKey: row.key,
+            elementKey: colKey,
+          };
+        }
+
+        (function (r0, key, cbEl) {
+          cbEl.onclick = function (e) {
+            e.stopPropagation();
+            self._applyCell(r0, key, cbEl.checked);
+            self._refreshRow(r0, tr);
+          };
+        })(row, colKey, box);
+      }
+    },
+
+    /** Open/close the popups of one (object, element type) cell. */
+    _applyCell: function (row, elementKey, on) {
+      var cell = row.cells[elementKey];
+      if (!cell) { return; }
+
+      var was = !!this._state[row.key][elementKey];
+      if (on === was) { return; }
+      this._state[row.key][elementKey] = !!on;
+      this._activeLabels += on ? cell.targets.length : -cell.targets.length;
+
+      for (var i = 0; i < cell.targets.length; i++) {
+        var target = cell.targets[i];
+        var popup = target.popup;
+
+        if (on) {
+          // These popups are the map's own popup component, so neutralise the
+          // behaviours that fight "many open at once":
+          //  - autoClose: a new popup would close the previous one
+          //  - autoPan:  opening dozens would pan the map around
+          //  - closeOnClick: Leaflet fires a synthetic `preclick` before every
+          //    map click and closes popups on it (map option closePopupOnClick)
+          // All three are restored when the cell is switched off.
+          popup.options.autoClose = false;
+          popup.options.autoPan = false;
+          popup.options.closeOnClick = false;
+          target.layer.openPopup();
+        } else {
+          target.layer.closePopup();
+          popup.options.autoClose = true;
+          popup.options.autoPan = true;
+          delete popup.options.closeOnClick; // fall back to the map default
+        }
+      }
+
+      this._updateTitle();
+    },
+
+    /** Switch every available cell of one row. */
+    _setRow: function (row, tr, on) {
+      for (var key in row.cells) {
+        if (row.cells.hasOwnProperty(key)) {
+          this._applyCell(row, key, on);
+        }
+      }
+      this._refreshRow(row, tr);
+    },
+
+    /** Tri-state row checkbox (all / partial / none). */
+    _refreshRow: function (row, tr) {
+      var on = 0;
+      var total = 0;
+      for (var key in row.cells) {
+        if (!row.cells.hasOwnProperty(key)) { continue; }
+        total++;
+        if (this._state[row.key][key]) { on++; }
+      }
+      if (!tr._rowCheckbox) { return; }
+      tr._rowCheckbox.checked = total > 0 && on === total;
+      tr._rowCheckbox.indeterminate = on > 0 && on < total;
+    },
+
+    _toggleExpanded: function () {
+      var show = this._tableEl.style.display === 'none';
+      this._tableEl.style.display = show ? '' : 'none';
+      if (this._container) {
+        if (show) { L.DomUtil.addClass(this._container, 'tr-il-expanded'); }
+        else { L.DomUtil.removeClass(this._container, 'tr-il-expanded'); }
+      }
+    },
+
+    _updateTitle: function () {
+      var base = options.title || 'Labels';
+      this._titleEl.textContent = this._activeLabels
+        ? base + ' (' + this._activeLabels + ')'
+        : base;
+    },
+  });
+
+  var control = new InfoLabelsControl();
+  control._rows = rows;
+  control._columns = columns;
+  control.hasContent = rows.length > 0 && columns.length > 0;
+  return control;
+}
