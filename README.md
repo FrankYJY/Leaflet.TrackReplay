@@ -1,151 +1,395 @@
 # Leaflet.TrackReplay
 
-A Leaflet plugin for replaying GPS tracks with customizable playback controls, speed adjustment, and rich event hooks.
+时间轴对齐的批量数据回放系统 — A Leaflet plugin for time-aligned batch GPS track replay.
 
 [![npm version](https://img.shields.io/npm/v/leaflet-trackreplay.svg)](https://www.npmjs.com/package/leaflet-trackreplay)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
-<p align="center">
-  <em>Demo screenshot coming soon</em>
-</p>
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Features
 
-- 🎬 **Play / Pause / Stop** — Full playback controls as a Leaflet control
-- ⏩ **Adjustable speed** — Real-time, fast-forward, or slow-motion
-- 🔄 **Loop mode** — Automatically restart playback when the track ends
-- 🧭 **Auto-rotate marker** — Marker faces the direction of movement
-- 📍 **Seek** — Jump to any position along the track
-- 🎨 **Customizable** — Track styles, marker icon, elapsed-trail colors
-- 📡 **Rich events** — `start`, `pause`, `stop`, `finish`, `seek`, `speedchange`, `reset`
-- 🗺️ **Auto fit bounds** — Automatically zoom to show the full track
-- ⏱️ **Time-aware** — Respects per-point timestamps for realistic playback
+- 🎬 **Video-player-like playback** — play/pause, stop, speed control, progress slider
+- 🗺️ **Multi-layer tracks** — organize tracks in a hierarchical layer tree
+  (Leaflet.Control.Layers.Tree when present, flat `L.control.layers` fallback otherwise)
+- 🎨 **Speed-based coloring** — 3 modes: fixed (Turbo ramp over a configurable range),
+  adaptive (P5–P95), custom (branca-style)
+- 📍 **Point clustering** — marker cluster for dense track points, every data point kept (via Leaflet.markercluster)
+- 🏃 **Moving indicators** — animated markers with bearing-based rotation
+- 🛤️ **Dynamic route coloring** — traveled (red) / untraveled (blue) edge rendering
+- 👁️ **View following** — auto-pan to follow moving objects (latest/random/named/off)
+- ⏱️ **Editable timeline** — double-click to type a timestamp and jump
+- 🔌 **Decoupled architecture** — use the core engine + individual layers independently
+- 💬 **Popups** — per-segment popups on track segments and points, plus static-feature popups
+- 📡 **Event system** — `start`, `pause`, `stop`, `finished`, `tick`, `timechange`, `speedchange`
 
 ## Installation
 
-### Via npm
+### npm
 
 ```bash
 npm install leaflet-trackreplay
 ```
 
-### Via CDN (unpkg / jsDelivr)
+### CDN
 
 ```html
-<!-- CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet-trackreplay/dist/leaflet-trackreplay.css" />
-
-<!-- JS -->
 <script src="https://unpkg.com/leaflet-trackreplay/dist/leaflet-trackreplay.iife.js"></script>
 ```
 
-> **Note:** Leaflet.TrackReplay requires Leaflet `^1.7.0`. Make sure Leaflet is loaded first.
+### Requirements
+
+- Leaflet `^1.7.0`
+- Leaflet.markercluster `^1.5.0` (optional — for point clustering)
+- Leaflet.Control.Layers.Tree `^1.2.0` (optional — collapsible hierarchical layer control;
+  without it the layer control falls back to a flat `L.control.layers` with breadcrumb labels)
 
 ## Quick Start
 
-```js
-// Create a map
-var map = L.map('map').setView([39.9042, 116.4074], 13);
+```javascript
+// 1. Create a map
+var map = L.map('map').setView([39.91, 116.41], 14);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-// Define your track data
-var track = [
-  { lat: 39.9042, lng: 116.4074, time: 1700000000000 },
-  { lat: 39.9142, lng: 116.4174, time: 1700000060000 },
-  { lat: 39.9242, lng: 116.4274, time: 1700000120000 },
-  // ... more points
-];
+// 2. Prepare your data as a GeoJSON FeatureCollection
+var data = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: [[116.40, 39.90], [116.41, 39.91], [116.42, 39.92]],
+      },
+      properties: {
+        layerPath: ['group1', 'track1'],
+        isTimestampedgeojson: true,
+        times: [1700000000000, 1700000005000, 1700000010000],
+        drawMovingIndicator: true,
+      },
+    },
+  ],
+};
 
-// Create the replay control and add it to the map
-var replay = L.trackReplay(track, {
-  speed: 10,       // 10× real-time
-  autoRotate: true,
-  fitBounds: true,
-}).addTo(map);
+// 3. Initialize TrackReplay
+var replay = L.trackReplay(map, data, {
+  colorMode: 'fixed',
+  speed: 1,
+  loop: false,
+});
 
-// Start playback
-replay.start();
+// 4. Start playback
+replay.play();
 ```
 
-## API Reference
+## API
 
-### Factory
+### `L.trackReplay(map, featureCollection, options)`
 
-| Method | Description |
-|---|---|
-| `L.trackReplay(trackData, options?)` | Create a new TrackReplay instance. Returns `L.TrackReplay`. |
+Creates a new TrackReplay instance and adds all layers/controls to the map.
 
-### Options
+#### Options
 
 | Option | Type | Default | Description |
-|---|---|---|---|
-| `trackData` | `Array` | `[]` | Array of track points: `{lat, lng, time?}`. `time` is a UNIX timestamp in ms. |
-| `trackStyle` | `Object` | `{color:'#3388ff', weight:3, opacity:0.7}` | Style for the untraversed portion of the track (Leaflet Polyline options). |
-| `elapsedStyle` | `Object` | `{color:'#ff4444', weight:4, opacity:0.9}` | Style for the already-traversed portion. |
-| `markerIcon` | `L.Icon` | `null` | Custom icon for the moving marker. Defaults to a colored circle. |
-| `autoRotate` | `Boolean` | `true` | Auto-rotate the marker to face the direction of movement. |
-| `speed` | `Number` | `1` | Playback speed multiplier (1 = real-time, 60 = 1 minute per second). |
-| `loop` | `Boolean` | `false` | Loop playback when the track ends. |
-| `autoPlay` | `Boolean` | `false` | Start playing automatically after `.addTo(map)`. |
-| `tickInterval` | `Number` | `42` | Animation frame interval in ms. |
-| `fitBounds` | `Boolean` | `true` | Fit map view to track bounds on init. |
-| `fitBoundsPadding` | `Array` | `[30, 30]` | Padding in pixels when fitting bounds. |
-| `fitBoundsMaxZoom` | `Number` | `16` | Max zoom when fitting bounds. |
+|--------|------|---------|-------------|
+| `colorMode` | `'fixed' \| 'adaptive' \| 'custom'` | `'fixed'` | Speed-to-color mapping mode |
+| `colorConfig` | `ColorBarConfig` | — | Custom colorbar config (required for `'custom'` mode) |
+| `colorRange` | `number[]` | `[0, 200]` | `[min, max]` km/h the ramp spans in `'fixed'` mode |
+| `speed` | `number` | `1` | Initial playback speed multiplier |
+| `speedOptions` | `number[]` | `[0.25, 0.5, 1, 2, 4, 8, 60, 600, 3600]` | Speed ladder shown in the selector |
+| `speedLabel` | `(speed) => string` | — | Custom label formatter for the ladder |
+| `loop` | `boolean` | `false` | Auto-restart when finished |
+| `tickLen` | `number` | `250` | Tick interval in ms |
+| `minTickMs` | `number` | `16` | Tick interval floor — keeps high speeds from flooding the tick loop |
+| `showControls` | `boolean` | `true` | Show playback controls (play/pause, stop, speed, loop) |
+| `showTimeline` | `boolean` | `true` | Show timeline slider — when both are enabled they render together in a **single box** |
+| `controlBarPosition` | `string` | `'bottomleft'` | Corner of the combined playback + timeline box |
+| `showLegend` | `boolean` | `true` | Show speed color legend |
+| `showViewFollow` | `boolean` | `true` | Show view follow control |
+| `bearingTransform` | `(bearing: number) => number \| null` | pass-through | Transform bearing before rotation. Rotation is on by default; pass `null` to disable (slightly faster) |
+| `rotationOffset` | `number` | `0` | Degrees added to the bearing (e.g. `90` if the icon points right) |
+| `movingIcon` | `L.Icon \| L.DivIcon` | — | Custom icon for moving indicators |
+| `traveledStyle` | `object` | `{color:'#e74c3c',weight:4}` | Style for traveled route edge |
+| `untraveledStyle` | `object` | `{color:'#3498db',weight:4}` | Style for untraveled route edge |
+| `elementLabels` | `object` | English defaults | Labels for the per-element layers: `{track, points, static, events, traveled, untraveled, indicator}` |
+| `showElementToggles` | `boolean` | `true` | Show the batch control (one tri-state checkbox per element type, across all objects) |
+| `elementTogglesPosition` | `string` | `'topright'` | Corner for the batch control |
+| `elementTogglesTitle` | `string` | `'Batch'` | Title of the batch control |
 
-### Methods
+#### Per-element layers
 
-| Method | Returns | Description |
-|---|---|---|
-| `start()` | `this` | Start or resume playback. Fires `start` event. |
-| `pause()` | `this` | Pause playback. `start()` resumes from here. Fires `pause` event. |
-| `stop()` | `this` | Stop and reset to the beginning. Fires `stop` event. |
-| `reset()` | `this` | Reset to start without changing play state. Fires `reset` event. |
-| `setSpeed(n)` | `this` | Set playback speed multiplier. Fires `speedchange` event. |
-| `seek(fraction)` | `this` | Jump to a position (0–1). Fires `seek` event. |
-| `setTrackData(data, reset?)` | `this` | Replace track data. Optionally resets playback. |
-| `isPlaying()` | `Boolean` | Whether playback is active. |
-| `isFinished()` | `Boolean` | Whether the end of the track has been reached. |
-| `getProgress()` | `Number` | Current progress as a fraction (0–1). |
-| `getLatLng()` | `L.LatLng` | Current interpolated position on the map. |
+Every object (`layerPath`) is split into individual toggleable layers — its track lines, track
+points, traveled/untraveled route and moving indicator each appear as their own entry in the layer
+tree, so they can be shown or hidden independently:
 
-### Events
+```
+visitor
+├── Bee
+│   ├── 轨迹 (Track)         — speed-coloured track lines
+│   ├── 节点 (Points)        — clustered track points
+│   ├── 已行进 (Traveled)    — traveled route edge
+│   ├── 未行进 (Untraveled)  — remaining route edge
+│   └── 箭头 (Indicator)     — moving indicator
+└── Mark
+    └── …
+```
+
+Every branch has a select-all checkbox. Hidden elements are skipped by the time engine (no
+per-frame work for invisible layers, as long as both route lines are hidden); a layer toggled back
+on is refreshed immediately.
+
+Programmatic access: `replay.allLayers['visitor/Bee'].elements` is
+`[{ key, label, layer }, …]` — use it to toggle elements yourself with
+`map.addLayer(el.layer)` / `map.removeLayer(el.layer)`.
+
+#### Batch control
+
+A separate control (`showElementToggles`, default on) gives one **tri-state checkbox per element
+type** — 轨迹 / 节点 / 已行进 / 未行进 / 箭头 — that switches that type on or off **for every object
+at once**, independent of the layer tree's per-object checkboxes:
+
+```
+批量
+☑ 轨迹    2/2      ← every object's track lines
+☐ 节点    0/2
+▣ 已行进  1/2      ← partial: some objects' traveled route shown
+…
+```
+
+- The checkbox shows a dash when only some objects have that element type enabled, and the
+  `on/total` counter makes the state explicit.
+- Batch switching also affects objects whose `layerVisibility` was `false` at init.
+- Every change goes through `map.addLayer` / `map.removeLayer`, so the layer tree checkboxes (and
+  their select-all parents) stay in sync automatically — in both directions.
+
+#### Instance Methods
+
+| Method | Description |
+|--------|-------------|
+| `play()` | Start/resume playback |
+| `pause()` | Pause playback |
+| `stop()` | Stop and reset to start |
+| `seek(timeMs)` | Jump to a specific timestamp |
+| `seekByProgress(progress)` | Jump to a progress fraction (0–1) |
+| `setSpeed(speed)` | Set playback speed multiplier |
+| `getSpeed()` | Get playback speed multiplier |
+| `setLoop(loop)` | Enable/disable auto-restart |
+| `getLoop()` | Get loop mode |
+| `getCurrentTime()` | Get current time (ms) |
+| `getProgress()` | Get progress (0–1) |
+| `getState()` | Get state: `'playing'` / `'paused'` / `'stopped'` |
+| `on(event, fn)` | Register event listener |
+| `off(event, fn)` | Remove event listener |
+| `destroy()` | Remove all layers, controls, and listeners |
+
+#### Events
 
 | Event | Data | Description |
-|---|---|---|
-| `start` | `{elapsed}` | Playback started or resumed. |
-| `pause` | `{elapsed}` | Playback paused. |
-| `stop` | — | Playback stopped and reset. |
-| `reset` | — | Track reset to starting position. |
-| `finish` | — | Reached the end of the track. |
-| `seek` | `{fraction}` | Jumped to a position via `seek()`. |
-| `speedchange` | `{speed}` | Playback speed changed. |
+|-------|------|-------------|
+| `start` | `{ time }` | Playback started |
+| `pause` | `{ time }` | Playback paused |
+| `stop` | `{ time }` | Playback stopped (reset) |
+| `finished` | `{ time }` | Reached end of timeline |
+| `tick` | `{ time, progress }` | Each time frame |
+| `timechange` | `{ time, progress }` | Time changed (seek/stop) |
+| `speedchange` | `{ speed }` | Speed multiplier changed |
+
+### TimestampEdgeoJSON Format
+
+Extends standard GeoJSON features with additional properties:
+
+```typescript
+{
+  type: 'Feature',
+  geometry: { type: 'LineString', coordinates: [[lng, lat], ...] },
+  properties: {
+    layerPath: string[],            // required: hierarchical layer path
+    isTimestampedgeojson: true,     // required: marks as timestamped data
+    times: number[],                // required: Unix timestamps (ms or s)
+    speeds?: number[],              // optional: km/h, length = coords.length - 1
+    styles?: object[],              // optional: per-segment style overrides
+    popups?: string[],              // optional: per-segment popup content
+    pointPopups?: string[],         // optional: per-point popup content (length = coordinates.length)
+    drawMovingIndicator?: boolean,  // optional: enable moving marker
+    layerVisibility?: boolean,      // optional: default visibility (default true)
+    style?: object,                 // optional: base style for entire track
+    color?: string,                 // optional: single color for the whole track
+  }
+}
+```
+
+### Playback speed
+
+The selector offers a ladder of speeds. Below 60× entries read as plain multipliers (`0.25×` …
+`8×`); at 60× and above they switch to **time compression**, which is the natural notation for
+tracks spanning hours or days:
+
+| value | label |
+|-------|-------|
+| `60` | `1s = 1min` |
+| `600` | `1s = 10min` |
+| `3600` | `1s = 1h` |
+
+```javascript
+L.trackReplay(map, data, {
+  // custom ladder — entries ≥ 60× are auto-labelled as time compression
+  speedOptions: [1, 10, 60, 600, 3600],
+  // …or take full control of the labels
+  speedLabel: function (speed) { return speed + 'x'; },
+});
+```
+
+Time still advances by *real elapsed × speed* at any rate, so the `minTickMs` floor (default 16 ms)
+only controls how often the display refreshes — never the playback rate itself.
+
+### Event markers
+
+Non-timestamped features tagged with `properties.element` are grouped into their own element layer
+under the object — a separate tree entry and batch-toggle row, independent of the point cluster.
+The typical use is an event layer:
+
+```json
+{ "type": "Feature",
+  "geometry": { "type": "Point", "coordinates": [116.44, 39.92] },
+  "properties": {
+    "layerPath": ["visitor", "Mark"],
+    "element": "events",
+    "popup": "<b>掉头事件</b><br>22:41:00",
+    "style": { "color": "#e74c3c", "weight": 2, "radius": 14 }
+  } }
+```
+
+Point features render as **rings**: an unfilled `L.circleMarker` whose radius is in **pixels**
+(screen-fixed, like folium's `CircleMarker`). The default style is
+`{radius: 10, color: '#e74c3c', weight: 2, fill: false}`; `properties.style` overrides it
+(`fill: true` for a filled dot, `radius` for size). Clicking a ring opens its `popup`.
+
+- Label from `elementLabels.events` (default `Events`).
+- Event layers are drawn **above** the tracks (annotations stay clickable), while the generic
+  `static` element (zones, areas) stays below them.
+- Geographic rings (radius in meters) or ring *bands* (polygon with an inner ring, folium's donut
+  technique) already work through the plain GeoJSON path — a `Polygon` with two coordinate rings
+  renders as a donut today.
+
+### Speed → colour mapping
+
+`colorMode` decides how a segment's speed becomes a colour. `fixed` and `adaptive` share the same
+continuous **Turbo-style ramp** — the magnitude convention (like Traccar/Garmin): slow = dark
+blue → cyan → green → yellow → orange → red = fast. They differ only in the range it spans:
+
+| mode | range |
+|------|-------|
+| `fixed` | `colorRange`, default **0–200 km/h** (externally configurable) |
+| `adaptive` | P5–P95 of all speeds in the data (automatic) |
+| `custom` | `colorConfig.vmin` … `vmax`, with your own colour stops |
+
+```javascript
+L.trackReplay(map, data, { colorMode: 'fixed', colorRange: [0, 120] });
+```
+
+The legend always reports the active range, so its labels follow `colorRange` automatically.
+
+### Popups
+
+- **Track segments** — provide `popups: string[]` (length = `coordinates.length - 1`, per segment).
+  Clicking a track segment opens the corresponding popup. Tracks with a feature-level
+  `style`/`color` are still split per segment when `popups` is present (the base style is kept on
+  every segment).
+- **Track points (nodes)** — provide `pointPopups: string[]` (length = `coordinates.length`, per
+  point). Clicking a point opens its own popup instead of the segment's. Without `pointPopups`,
+  points fall back to the popup of the segment that arrives at them.
+- **Static features** — set `popup: string` in `properties`.
+- The traveled/untraveled route overlays are non-interactive and never swallow clicks, and static
+  layers are drawn below the tracks, so segment popups work even where a zone polygon covers them.
+
+### Point Clustering
+
+Every data point of a timestamped track gets its own marker. Points that share the exact same
+coordinates (e.g. a track that visits the same place twice, like an out-and-back) are kept as
+separate markers: they stay clustered even at max zoom, and clicking such a cluster spiderfies it
+so each visit can be inspected individually — same behaviour as folium's `MarkerCluster`.
+The spider legs render with an SVG renderer and are non-interactive, so they keep working on
+`preferCanvas` maps without swallowing clicks aimed at the markers.
+
+### ColorBar Config (Custom Mode)
+
+```javascript
+var colorbarConfig = {
+  colors: ['#0000FF', '#00FF00', '#FFFF00', '#FF0000', '#800080'],
+  index: [-10, 0, 75.0, 150, 500],
+  vmin: -10,
+  vmax: 500,
+};
+```
+
+### Advanced: Using Core Modules Independently
+
+```javascript
+// Parse data without rendering
+var parsed = L.TrackReplay.Core.DataParser.parseFeatureCollection(data, colorMapper);
+
+// Create individual layers manually
+var trackLayer = L.TrackReplay.Layers.TrackLayer.createTrackLayer(parsed.layerFeatures[0].features);
+
+// Custom time engine
+var engine = L.TrackReplay.Core.TimeEngine.createTimeEngine({ speed: 2 });
+engine.on('tick', function (d) {
+  console.log('Time:', d.time, 'Progress:', d.progress);
+});
+```
 
 ## Development
 
 ```bash
-# Clone the repo
-git clone https://github.com/FrankYJY/Leaflet.TrackReplay.git
-cd Leaflet.TrackReplay
-
 # Install dependencies
 npm install
 
-# Build (outputs to dist/)
+# Build the plugin
 npm run build
 
-# Dev/watch mode
+# Watch mode
 npm run dev
 
-# Lint
-npm run lint
+# Run Python demo server
+cd examples
+pip install fastapi uvicorn jinja2
+python server.py
+# Open http://localhost:8000
 ```
 
-Open `examples/index.html` in a browser to see the demo.
+## Project Structure
 
-## Contributing
-
-Contributions, issues, and feature requests are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) (TODO).
+```
+├── src/
+│   ├── TrackReplay.js          # Main entry point
+│   ├── TrackReplay.css         # Styles
+│   ├── core/
+│   │   ├── DataParser.js       # GeoJSON parsing & processing
+│   │   ├── ColorMapper.js      # Speed-to-color mapping
+│   │   ├── TimeEngine.js       # Shared time-axis engine
+│   │   └── LayerTreeBuilder.js # Layer tree construction
+│   ├── layers/
+│   │   ├── TrackLayer.js       # Speed-colored track lines
+│   │   ├── PointClusterLayer.js# Marker cluster for points
+│   │   ├── MovingIndicator.js  # Animated moving marker
+│   │   ├── DynamicRoute.js     # Traveled/untraveled route
+│   │   └── StaticLayer.js      # Regular GeoJSON layer
+│   ├── controls/
+│   │   ├── PlaybackControls.js # Play/pause/stop/speed UI
+│   │   ├── TimelineControl.js  # Progress slider + time editor
+│   │   ├── ViewFollowControl.js# Map view following
+│   │   └── ColorLegend.js      # Speed color legend
+│   └── utils/
+│       ├── GeoUtils.js          # Distance, bearing, interpolation
+│       └── TimeUtils.js         # Timestamp formatting/parsing
+├── examples/
+│   ├── server.py               # Python dev server
+│   └── templates/
+│       └── demo.html.jinja2    # Jinja2 template
+├── dist/                       # Build output
+├── IMPLEMENTATION.md           # Implementation guide
+└── package.json
+```
 
 ## License
 
-MIT © [Frank Yao](https://github.com/FrankYJY)
+MIT © Frank Yao

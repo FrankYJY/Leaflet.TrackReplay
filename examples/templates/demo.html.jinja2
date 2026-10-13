@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaflet.TrackReplay — Demo</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="" />
+
+  <!-- MarkerCluster CSS (optional, for point clustering) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+  <!-- Hierarchical layer control CSS (optional, gives a tree layer control) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.control.layers.tree@1.2.0/L.Control.Layers.Tree.css"
+        integrity="sha256-7KwgTdifb/uQQfwmSTfAD/bGoyyVLJMLXuDxZAIlgfQ=" crossorigin="" />
+
+  <!-- Fullscreen + measure tool CSS (optional helpers) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-fullscreen@1.0.2/dist/leaflet.fullscreen.css"
+        integrity="sha256-YTbhDGEH5amI/JfotPMN7IByFpsN9e4tCBnv5oNdvHU=" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.css"
+        integrity="sha256-vy42LTyS2HK4KRRV/DawoHpUYASRdyQIxQwbPwAl7L8=" crossorigin="" />
+
+  <!-- Plugin CSS (local build) -->
+  <link rel="stylesheet" href="/dist/leaflet-trackreplay.css" />
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    #map { height: 100%; width: 100%; }
+
+    /* Info overlay — top-center so it doesn't cover the legend (bottom-right)
+       or the playback controls (top-left / top-right) */
+    .demo-info {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,255,255,0.92);
+      padding: 10px 14px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      font-size: 12px;
+      color: #555;
+      z-index: 1000;
+      pointer-events: none;
+      text-align: center;
+    }
+    .demo-info strong { color: #333; }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="demo-info">
+  <strong>Leaflet.TrackReplay</strong> — Demo<br>
+  Data: {{ data.features | length }} features,
+  {% set ts_count = data.features | selectattr('properties.isTimestampedgeojson') | list | length %}
+  {{ ts_count }} timestamped<br>
+  Time range: {{ time_min }} – {{ time_max }}<br>
+  <small>Scroll to zoom • Drag to pan • Double-click time to edit</small>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+
+<!-- MarkerCluster JS (optional) -->
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<!-- Hierarchical layer control JS (optional, used by the plugin when present) -->
+<script src="https://unpkg.com/leaflet.control.layers.tree@1.2.0/L.Control.Layers.Tree.js"
+        integrity="sha256-OnhoT4cKoWHZKx9bHteTKUqkhsC2tHhXKJeQAukhOPc=" crossorigin=""></script>
+
+<!-- Fullscreen + measure tool JS (optional helpers; the measure bundle is the Chinese locale) -->
+<script src="https://unpkg.com/leaflet-fullscreen@1.0.2/dist/Leaflet.fullscreen.js"
+        integrity="sha256-/VGiFGzaidNadoKY4/8zFXP/OqGdajjpB+0vNHRz33o=" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.cn.js"
+        integrity="sha256-5VByb5IhxzldYKhnGqxAOq02Zb4Ywg6xfZ3ZGmFUSZA=" crossorigin=""></script>
+
+<!-- Plugin JS (local build) -->
+<script src="/dist/leaflet-trackreplay.umd.js"></script>
+
+<script>
+  // ===== Embed the data from Python =====
+  var trackData = {{ data_json | safe }};
+
+  // ===== Initialize map =====
+  var map = L.map('map', {
+    center: [39.91, 116.41],
+    zoom: 14,
+    zoomControl: true,
+    preferCanvas: true,
+  });
+
+  // Base tile layer
+  var baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  }).addTo(map);
+
+  // Add scale control
+  L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
+
+  // Fullscreen (Leaflet.fullscreen)
+  L.control.fullscreen({
+    position: 'topleft',
+    title: '全屏',
+    titleCancel: '退出全屏',
+  }).addTo(map);
+
+  // ---- leaflet-measure × Leaflet ≥ 1.8 compatibility shim ----
+  // While measuring, leaflet-measure adds a helper marker whose divIcon is 2×
+  // the map size and is focusable (tabindex="0") — it catches clicks across
+  // the whole map. Since Leaflet 1.8, focusing a marker runs Marker._panOnFocus
+  // → map.panInside(latlng, {paddingBottomRight: iconSize}), so with that
+  // oversized icon every click yanks the map away (and mousedown/mouseup end up
+  // on different spots, so the click never completes → no measurement point).
+  // Skip pan-on-focus for such oversized helper markers.
+  if (L.Marker.prototype._panOnFocus) {
+    var origPanOnFocus = L.Marker.prototype._panOnFocus;
+    L.Marker.prototype._panOnFocus = function () {
+      var io = (this.options.icon && this.options.icon.options) || {};
+      var size = io.iconSize;
+      // iconSize may be an [x, y] array or an L.Point
+      var w = size ? (size.x !== undefined ? size.x : size[0]) : 0;
+      var h = size ? (size.y !== undefined ? size.y : size[1]) : 0;
+      if (w >= 1000 || h >= 1000) { return; }
+      return origPanOnFocus.call(this);
+    };
+  }
+
+  // Measure tool (leaflet-measure) — 距离/面积测量
+  L.control.measure({
+    position: 'topleft',
+    primaryLengthUnit: 'meters',
+    secondaryLengthUnit: 'kilometers',
+    primaryAreaUnit: 'sqmeters',
+    secondaryAreaUnit: 'hectares',
+  }).addTo(map);
+
+  // ===== Initialize TrackReplay =====
+  var replay = L.trackReplay(map, trackData, {
+    colorMode: 'fixed',       // 'fixed' | 'adaptive' | 'custom'
+    speed: 1,
+    loop: false,
+    tickLen: 100,             // smooth 10fps
+    showControls: true,
+    showTimeline: true,
+    showLegend: true,
+    showViewFollow: true,
+    // Each display element of every object gets its own toggleable layer
+    elementLabels: {
+      track: '轨迹',
+      points: '节点',
+      static: '静态',
+      events: '事件',
+      traveled: '已行进',
+      untraveled: '未行进',
+      indicator: '箭头',
+    },
+    // Batch control: one tri-state checkbox per element type, for all objects
+    showElementToggles: true,
+    elementTogglesTitle: '批量',
+  });
+
+  // ===== Keyboard shortcuts =====
+  document.addEventListener('keydown', function (e) {
+    switch (e.key) {
+      case ' ':
+        e.preventDefault();
+        if (replay.getState() === 'playing') {
+          replay.pause();
+        } else {
+          replay.play();
+        }
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        replay.seek(replay.getCurrentTime() - 5000); // back 5s
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        replay.seek(replay.getCurrentTime() + 5000); // forward 5s
+        break;
+      case 'r':
+      case 'R':
+        e.preventDefault();
+        replay.stop();
+        break;
+      case '0':
+        e.preventDefault();
+        replay.setSpeed(1);
+        console.log('Speed: 1×');
+        break;
+      default:
+        // 1-9: pick the Nth entry of the speed selector
+        // (0.25× … 8×, then time compression: 1s = 1min / 10min / 1h)
+        if (/^[1-9]$/.test(e.key)) {
+          e.preventDefault();
+          var select = document.querySelector('.tr-speed-select');
+          var opt = select && select.options[Number(e.key) - 1];
+          if (opt) {
+            select.value = opt.value;
+            replay.setSpeed(parseFloat(opt.value));
+            console.log('Speed: ' + opt.textContent);
+          }
+        }
+        break;
+    }
+  });
+
+  // ===== Log events =====
+  replay.on('start', function (d) { console.log('[trackreplay] start', d.time); });
+  replay.on('pause', function (d) { console.log('[trackreplay] pause', d.time); });
+  replay.on('stop', function (d) { console.log('[trackreplay] stop', d.time); });
+  replay.on('finished', function (d) { console.log('[trackreplay] finished', d.time); });
+
+  console.log('Leaflet.TrackReplay demo ready!');
+  console.log('  Space = Play/Pause');
+  console.log('  ← →  = Seek ±5s');
+  console.log('  R     = Stop');
+  console.log('  1-9   = Speed (Nth option: 0.25× … 8×, 1s=1min, 1s=10min, 1s=1h)');
+  console.log('  0     = 1×');
+  console.log('  State:', replay.getState());
+  console.log('  Legend:', replay.getLegend(10));
+</script>
+
+</body>
+</html>

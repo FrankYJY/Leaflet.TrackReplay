@@ -13,8 +13,9 @@
     "src/"
   ],
   "scripts": {
-    "build": "rollup -c && cp src/Leaflet.TrackReplay.css dist/leaflet-trackreplay.css",
+    "build": "rollup -c && node -e \"require('fs').copyFileSync('src/TrackReplay.css','dist/leaflet-trackreplay.css')\"",
     "dev": "rollup -c -w",
+    "example": "cd examples && python server.py",
     "lint": "eslint src/",
     "prepublishOnly": "npm run build"
   },

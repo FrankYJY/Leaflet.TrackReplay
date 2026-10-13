@@ -23,7 +23,7 @@ const external = ['leaflet'];
 export default [
   // UMD build (for <script> tags, AMD, CommonJS)
   {
-    input: 'src/Leaflet.TrackReplay.js',
+    input: 'src/TrackReplay.js',
     output: {
       file: `dist/${pkg.name}.umd.js`,
       format: 'umd',
@@ -31,6 +31,7 @@ export default [
       globals,
       banner,
       sourcemap: true,
+      exports: 'named',
     },
     external,
     plugins: [buble()],
@@ -38,7 +39,7 @@ export default [
 
   // IIFE build (standalone, minified — CDN-friendly)
   {
-    input: 'src/Leaflet.TrackReplay.js',
+    input: 'src/TrackReplay.js',
     output: {
       file: `dist/${pkg.name}.iife.js`,
       format: 'iife',
@@ -46,6 +47,7 @@ export default [
       globals,
       banner,
       sourcemap: true,
+      exports: 'named',
     },
     external,
     plugins: [buble(), terser()],
@@ -53,7 +55,7 @@ export default [
 
   // ESM build (for bundlers that understand ES modules)
   {
-    input: 'src/Leaflet.TrackReplay.js',
+    input: 'src/TrackReplay.js',
     output: {
       file: `dist/${pkg.name}.esm.js`,
       format: 'es',
@@ -66,12 +68,13 @@ export default [
 
   // CommonJS build (for Node / older bundlers)
   {
-    input: 'src/Leaflet.TrackReplay.js',
+    input: 'src/TrackReplay.js',
     output: {
       file: pkg.main,
       format: 'cjs',
       banner,
       sourcemap: true,
+      exports: 'named',
     },
     external,
     plugins: [buble()],

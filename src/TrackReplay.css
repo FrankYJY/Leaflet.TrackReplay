@@ -1,0 +1,350 @@
+/* Leaflet.TrackReplay Stylesheet */
+
+/* ---- Playback Controls ---- */
+.leaflet-trackreplay-controls {
+  background: #fff;
+  padding: 6px 8px;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.leaflet-trackreplay-controls .tr-btn {
+  background: #f4f4f4;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1;
+  transition: background 0.15s;
+}
+
+.leaflet-trackreplay-controls .tr-btn:hover {
+  background: #e4e4e4;
+}
+
+.leaflet-trackreplay-controls .tr-btn:active {
+  background: #d4d4d4;
+}
+
+.tr-speed-label {
+  margin-left: 4px;
+  color: #555;
+  font-size: 12px;
+}
+
+.tr-speed-select {
+  font-size: 12px;
+  padding: 2px 4px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.tr-loop-label {
+  margin-left: 4px;
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.tr-loop-check {
+  cursor: pointer;
+}
+
+/* ---- Timeline ---- */
+.leaflet-trackreplay-timeline {
+  background: #fff;
+  padding: 8px 12px;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  min-width: 280px;
+  font-size: 12px;
+}
+
+.tr-time-display {
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #333;
+}
+
+.tr-time-label {
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 2px;
+  transition: background 0.15s;
+}
+
+.tr-time-label:hover {
+  background: #e8f0fe;
+}
+
+.tr-time-input {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  padding: 2px 6px;
+  border: 1px solid #4a90d9;
+  border-radius: 2px;
+  outline: none;
+  width: 180px;
+}
+
+.tr-slider-container {
+  width: 100%;
+}
+
+.tr-slider {
+  width: 100%;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #3388ff;
+  height: 6px;
+}
+
+/* ---- View Follow Control ---- */
+.leaflet-trackreplay-viewfollow {
+  background: #fff;
+  padding: 8px 10px;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  font-size: 12px;
+  max-width: 220px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.tr-vf-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 3px;
+}
+
+.tr-vf-option {
+  display: block;
+  padding: 2px 0;
+  cursor: pointer;
+  color: #555;
+}
+
+.tr-vf-option:hover {
+  color: #222;
+}
+
+.tr-vf-option input[type="radio"] {
+  margin-right: 4px;
+}
+
+.tr-vf-select-container {
+  margin-top: 4px;
+  border-top: 1px solid #eee;
+  padding-top: 4px;
+}
+
+.tr-vf-select {
+  width: 100%;
+  font-size: 11px;
+  padding: 2px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* ---- Color Legend ---- */
+.leaflet-trackreplay-legend {
+  background: #fff;
+  padding: 8px 10px;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  font-size: 11px;
+  min-width: 160px;
+}
+
+.tr-legend-title {
+  font-weight: bold;
+  margin-bottom: 6px;
+  color: #333;
+  font-size: 12px;
+}
+
+.tr-legend-gradient {
+  width: 100%;
+}
+
+.tr-legend-bar {
+  height: 12px;
+  border-radius: 2px;
+  margin-bottom: 4px;
+  border: 1px solid #ddd;
+}
+
+.tr-legend-labels {
+  display: flex;
+  justify-content: space-between;
+  color: #666;
+  font-size: 10px;
+}
+
+.tr-legend-label-min {
+  text-align: left;
+}
+
+.tr-legend-label-mid {
+  text-align: center;
+}
+
+.tr-legend-label-max {
+  text-align: right;
+}
+
+/* ---- Combined control bar (playback buttons + timeline in one box) ---- */
+.leaflet-trackreplay-controlbar {
+  background: #fff;
+  padding: 6px 8px;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+}
+
+/* The pieces drop their own box chrome when embedded in the bar */
+.leaflet-trackreplay-controlbar .leaflet-trackreplay-controls,
+.leaflet-trackreplay-controlbar .leaflet-trackreplay-timeline {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.leaflet-trackreplay-controlbar .tr-bar-timeline {
+  margin-top: 6px;
+}
+
+/* ---- Element toggles (batch show/hide by element type) ----
+   Styled after the view-follow control: white box, section header with a
+   separator, one option per line. */
+.leaflet-trackreplay-elementtoggles {
+  background: #fff;
+  padding: 8px 10px;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  max-width: 220px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.leaflet-trackreplay-elementtoggles .tr-et-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 3px;
+}
+
+.leaflet-trackreplay-elementtoggles .tr-et-row {
+  display: block;
+  padding: 2px 0;
+  color: #555;
+}
+
+.leaflet-trackreplay-elementtoggles .tr-et-row:hover {
+  color: #222;
+}
+
+.leaflet-trackreplay-elementtoggles .tr-et-label {
+  cursor: pointer;
+}
+
+.leaflet-trackreplay-elementtoggles .tr-et-row input[type="checkbox"] {
+  margin-right: 4px;
+}
+
+.leaflet-trackreplay-elementtoggles .tr-et-count {
+  margin-left: 6px;
+  color: #aaa;
+  font-size: 11px;
+}
+
+/* ---- Moving Indicator ---- */
+.leaflet-trackreplay-indicator,
+.leaflet-trackreplay-indicator.leaflet-interactive {
+  background: none !important;
+  border: none !important;
+  /* Let clicks reach the track segment underneath the moving marker
+     (must beat Leaflet's `.leaflet-marker-icon.leaflet-interactive`) */
+  pointer-events: none !important;
+}
+
+/* ---- Leaflet overrides for mobile/better UX ---- */
+
+/* ---- Layer tree (Leaflet.Control.Layers.Tree) ----
+   The plugin hides the expand/collapse symbol column on leaf rows
+   (display:none), which cancels out the per-level indent: a node and its
+   children end up in the same visual column. Reserve the column on leaves
+   so every nesting level lines up, and widen the indent with a guide line. */
+.leaflet-control-layers span.leaflet-layerstree-nevershow {
+  display: inline-block;
+  visibility: hidden;
+  width: 11px; /* matches the branch rows' symbol + space column */
+}
+
+.leaflet-control-layers .leaflet-layerstree-children {
+  padding-left: 14px;
+  margin-left: 4px;
+  border-left: 1px solid rgba(128, 128, 128, 0.35);
+}
+
+.leaflet-trackreplay-controls button,
+.leaflet-trackreplay-timeline input,
+.leaflet-trackreplay-viewfollow select {
+  -webkit-appearance: none;
+}
+
+/* Dark map compatibility */
+.leaflet-container.dark .leaflet-trackreplay-controls,
+.leaflet-container.dark .leaflet-trackreplay-timeline,
+.leaflet-container.dark .leaflet-trackreplay-controlbar,
+.leaflet-container.dark .leaflet-trackreplay-viewfollow,
+.leaflet-container.dark .leaflet-trackreplay-legend {
+  background: #2a2a2a;
+  color: #ddd;
+}
+
+.leaflet-container.dark .tr-btn {
+  background: #3a3a3a;
+  border-color: #555;
+  color: #ddd;
+}
+
+.leaflet-container.dark .tr-btn:hover {
+  background: #4a4a4a;
+}
+
+.leaflet-container.dark .tr-vf-title,
+.leaflet-container.dark .tr-legend-title {
+  color: #eee;
+  border-color: #444;
+}
+
+.leaflet-container.dark .tr-time-display {
+  color: #ddd;
+}
+
+.leaflet-container.dark .tr-time-label:hover {
+  background: #3a3a3a;
+}
