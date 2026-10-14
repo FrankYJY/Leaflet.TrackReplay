@@ -21,6 +21,8 @@
 - 💬 **Popups** — per-segment popups on track segments and points, plus static-feature popups
 - 🏷️ **Batch label display** — open any object's or element type's popups in bulk (they *are* the
   real popups, not look-alikes)
+- 🧭 **Basemap-aware datums** — WGS-84 ⇄ GCJ-02 (火星) conversion, so 高德/AMap tiles line up
+  with GPS tracks; basemaps can be handed to the layer tree as a radio group
 - 📡 **Event system** — `start`, `pause`, `stop`, `finished`, `tick`, `timechange`, `speedchange`
 
 ## Installation
@@ -119,6 +121,10 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `showInfoLabels` | `boolean` | `true` | Batch label display control — batch-opens the objects' existing popups (see below) |
 | `infoLabelsPosition` | `string` | `'topright'` | Corner of the label control |
 | `infoLabelsTitle` | `string` | `'Labels'` | Title of the label control |
+| `dataDatum` | `'wgs84' \| 'gcj02'` | `'wgs84'` | Datum of the **input** coordinates (see Basemaps & GCJ-02) |
+| `mapDatum` | `'wgs84' \| 'gcj02'` | `'wgs84'` | Datum of the **active basemap** — `'gcj02'` for 高德/AMap tiles |
+| `baseLayers` | `{label, layer}[]` | — | Basemaps shown as the layer tree's radio group (host owns the layers) |
+| `baseLayersLabel` | `string` | `'Basemap'` | Label of that radio group |
 
 #### Per-element layers
 
@@ -347,6 +353,48 @@ so each visit can be inspected individually — same behaviour as folium's `Mark
 The spider legs render with an SVG renderer and are non-interactive, so they keep working on
 `preferCanvas` maps without swallowing clicks aimed at the markers.
 
+### Basemaps & the GCJ-02 (火星) datum
+
+Leaflet always works in Web Mercator over WGS-84 — but whether the *content* of a tile is
+WGS-84 or GCJ-02 (the obfuscated datum used by 高德/AMap, Tencent, Google China) is the
+provider's choice. Plotting WGS-84 tracks on GCJ-02 tiles (or vice versa) misplaces them by
+roughly 300–600 m, so TrackReplay models this as two independent axes:
+
+| option | meaning | default |
+|--------|---------|---------|
+| `dataDatum` | datum of the **input** coordinates | `'wgs84'` |
+| `mapDatum` | datum of the **active basemap** (`'gcj02'` for 高德 tiles) | `'wgs84'` |
+
+When they differ, the data is converted **once, at parse time** (`DataParser`), so every
+downstream layer — track, points, events, traveled/untraveled edges, indicator — works in the
+map's own frame and all internal math (speed, bearing, interpolation) stays consistent.
+Both directions are supported; outside China the conversion is a no-op.
+
+```javascript
+L.trackReplay(map, data, {
+  dataDatum: 'wgs84',    // our GPS data
+  mapDatum: 'gcj02',     // 高德 (GCJ-02) basemap
+  baseLayers: [          // host creates/holds the tile layers …
+    { label: '标准', layer: amapVector },
+    { label: '卫星', layer: amapSatellite },
+  ],
+  baseLayersLabel: '底图', // … and the plugin renders them as the tree's radio group
+});
+```
+
+Consequences worth knowing:
+
+- `dataDatum` is collection-wide, not per feature — mixed-datum inputs need separate instances.
+- Coordinates the map *reports* — `map.getCenter()`, click `latlng`s, measure-tool readouts —
+  are always in the **map frame** (GCJ-02 while a GCJ-02 basemap is active). Convert back with
+  `L.TrackReplay.Utils.GCJ02.gcj02ToWgs84(lng, lat)` when feeding your own logic.
+- Popups pass through untouched; if a popup prints coordinates, decide explicitly which datum
+  to print.
+- Distances/areas are unaffected (the GCJ-02 offset field varies very slowly over space).
+- Changing the datum of the map frame means the data must be re-projected: re-create the
+  instance (`destroy()` and init again with the new `mapDatum`, keeping the playback time if
+  you want — that is exactly what the demo's settings panel does when you switch sources).
+
 ### ColorBar Config (Custom Mode)
 
 ```javascript
@@ -363,6 +411,10 @@ var colorbarConfig = {
 ```javascript
 // Parse data without rendering
 var parsed = L.TrackReplay.Core.DataParser.parseFeatureCollection(data, colorMapper);
+
+// WGS-84 ⇄ GCJ-02 (火星坐标系) conversion, for coordinates the map reports back
+var gcj = L.TrackReplay.Utils.GCJ02.wgs84ToGcj02(116.40, 39.90);
+var wgs = L.TrackReplay.Utils.GCJ02.gcj02ToWgs84(gcj[0], gcj[1]);
 
 // Create individual layers manually
 var trackLayer = L.TrackReplay.Layers.TrackLayer.createTrackLayer(parsed.layerFeatures[0].features);

@@ -5,6 +5,7 @@
 
 import { calculateSpeed } from '../utils/GeoUtils.js';
 import { normalizeTimesToMs } from '../utils/TimeUtils.js';
+import { wgs84ToGcj02, gcj02ToWgs84 } from '../utils/GCJ02.js';
 
 /**
  * @typedef {Object} ParsedData
@@ -23,6 +24,11 @@ import { normalizeTimesToMs } from '../utils/TimeUtils.js';
  * @param {Object} colorMapper        - ColorMapper instance (for auto-color mode)
  * @param {Object} [options]
  * @param {Function} [options.bearingTransform] - optional bearing transform function
+ * @param {string} [options.dataDatum='wgs84']  - datum of the input coordinates
+ *        ('wgs84' | 'gcj02'); converted to `mapDatum` during parsing so every
+ *        downstream layer works in the map's own frame
+ * @param {string} [options.mapDatum='wgs84']   - datum of the active basemap
+ *        (GCJ-02 tiles such as AMap/高德 place their content on the GCJ-02 grid)
  * @returns {ParsedData}
  */
 export function parseFeatureCollection(fc, colorMapper, options) {
@@ -31,6 +37,9 @@ export function parseFeatureCollection(fc, colorMapper, options) {
   if (!fc || fc.type !== 'FeatureCollection' || !fc.features) {
     throw new Error('DataParser: expected a GeoJSON FeatureCollection');
   }
+
+  var coordTransform = makeCoordTransform(options.dataDatum, options.mapDatum);
+  var parseOpts = { bearingTransform: options.bearingTransform, coordTransform: coordTransform };
 
   var features = fc.features;
   var layerMap = {};     // key: layerPath.join('/'), value: { path, features }
@@ -48,7 +57,7 @@ export function parseFeatureCollection(fc, colorMapper, options) {
 
     // Check if it's a TimestampEdgeoJSON feature
     if (props.isTimestampedgeojson) {
-      var results = processTimestampFeature(feature, colorMapper, options);
+      var results = processTimestampFeature(feature, colorMapper, parseOpts);
       if (results) {
         for (var j = 0; j < results.length; j++) {
           var seg = results[j];
@@ -72,8 +81,11 @@ export function parseFeatureCollection(fc, colorMapper, options) {
         }
       }
     } else {
-      // Regular GeoJSON feature — add as-is
-      addToLayerMap(layerMap, layerPath, feature);
+      // Regular GeoJSON feature (events, zones, …) — add as-is, or on a copy
+      // with converted geometry so the caller's input data is never mutated
+      addToLayerMap(layerMap, layerPath, coordTransform
+        ? convertFeatureGeometry(feature, coordTransform)
+        : feature);
     }
   }
 
@@ -112,7 +124,9 @@ function processTimestampFeature(feature, colorMapper, options) {
     return null;
   }
 
-  var coords = geom.coordinates;
+  var coords = options.coordTransform
+    ? transformCoords(geom.coordinates, options.coordTransform)
+    : geom.coordinates;
   var times = normalizeTimesToMs(props.times || []);
 
   if (times.length !== coords.length) {
@@ -192,8 +206,10 @@ function processTimestampFeature(feature, colorMapper, options) {
   };
 
   if (!needsSplit && baseStyle) {
-    // Single feature — no split needed
+    // Single feature — no split needed. Coordinates come from `coords` so a
+    // datum conversion is carried over (and the caller's data stays untouched).
     var singleFeature = cloneFeature(feature);
+    singleFeature.geometry.coordinates = coords.map(function (c) { return c.slice(); });
     singleFeature.properties = extend({}, props);
     singleFeature.properties.style = baseStyle;
     singleFeature._trackMeta = sourceMeta;
@@ -327,6 +343,51 @@ function flattenLayerTree(node, prefix) {
   }
 
   return result;
+}
+
+// ---- Datum conversion helpers ----
+
+/**
+ * Build a [lng, lat] → [lng, lat] transform for a datum pair, or null when the
+ * datums match (the common case, and a no-op).
+ */
+function makeCoordTransform(fromDatum, toDatum) {
+  var from = fromDatum || 'wgs84';
+  var to = toDatum || 'wgs84';
+  if (from === to) { return null; }
+  if (from === 'wgs84' && to === 'gcj02') { return wgs84ToGcj02; }
+  if (from === 'gcj02' && to === 'wgs84') { return gcj02ToWgs84; }
+  console.error('DataParser: unsupported datum conversion "' + from + '" → "' + to + '"');
+  return null;
+}
+
+/**
+ * Recursively convert GeoJSON positions (Point/LineString/Polygon/… nesting).
+ * Extra ordinates (altitude) are preserved.
+ */
+function transformCoords(coords, fn) {
+  if (!coords || !coords.length) { return coords; }
+  if (typeof coords[0] === 'number') {
+    var p = fn(coords[0], coords[1]);
+    return coords.length > 2 ? p.concat(coords.slice(2)) : p;
+  }
+  var out = [];
+  for (var i = 0; i < coords.length; i++) {
+    out.push(transformCoords(coords[i], fn));
+  }
+  return out;
+}
+
+/** Copy a feature with its geometry coordinates transformed. */
+function convertFeatureGeometry(feature, fn) {
+  var geom = feature.geometry;
+  if (!geom || !geom.coordinates) { return feature; }
+  var copy = {};
+  for (var k in feature) {
+    if (Object.prototype.hasOwnProperty.call(feature, k)) { copy[k] = feature[k]; }
+  }
+  copy.geometry = { type: geom.type, coordinates: transformCoords(geom.coordinates, fn) };
+  return copy;
 }
 
 // ---- Generic helpers ----

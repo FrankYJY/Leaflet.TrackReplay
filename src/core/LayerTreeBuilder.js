@@ -18,10 +18,27 @@
  *                                   `elements` is [{ key, label, layer }, …]
  * @param {Object} [options]
  * @param {boolean} [options.collapsed=true] - start collapsed
+ * @param {Object[]} [options.baseLayers] - [{ label, layer }] base layers shown
+ *        as the tree's radio group (only one active at a time)
+ * @param {string} [options.baseLayersLabel='Basemap'] - label of that group
  * @returns {L.Control} the layer control instance
  */
 export function createLayerControl(map, layerFeatures, layersByPath, options) {
   options = options || {};
+
+  // Base layers (basemaps) — radio group, no select-all checkbox
+  var baseTree = null;
+  var baseMap = {};
+  if (options.baseLayers && options.baseLayers.length) {
+    baseTree = { label: options.baseLayersLabel || 'Basemap', children: [] };
+    for (var b = 0; b < options.baseLayers.length; b++) {
+      baseTree.children.push({
+        label: options.baseLayers[b].label,
+        layer: options.baseLayers[b].layer,
+      });
+      baseMap[options.baseLayers[b].label] = options.baseLayers[b].layer;
+    }
+  }
 
   var treeNodes = [];   // hierarchical nodes for L.control.layers.tree
   var overlayMap = {};  // flat label → layer map for the built-in control
@@ -88,7 +105,7 @@ export function createLayerControl(map, layerFeatures, layersByPath, options) {
   var control;
   if (typeof L !== 'undefined' && L.control && L.control.layers && L.control.layers.tree) {
     // Real tree control (Leaflet.Control.Layers.Tree)
-    control = L.control.layers.tree(null, treeNodes, {
+    control = L.control.layers.tree(baseTree, treeNodes, {
       collapsed: collapsed,
       selectorBack: false,
       labelIsSelector: 'both',
@@ -97,7 +114,7 @@ export function createLayerControl(map, layerFeatures, layersByPath, options) {
     });
   } else {
     // Fallback: built-in flat control with breadcrumb labels
-    control = L.control.layers(null, overlayMap, {
+    control = L.control.layers(baseMap, overlayMap, {
       collapsed: collapsed,
     });
   }

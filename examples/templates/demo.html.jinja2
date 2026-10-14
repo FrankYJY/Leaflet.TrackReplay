@@ -50,6 +50,68 @@
       text-align: center;
     }
     .demo-info strong { color: #333; }
+
+    /* ---- Settings control + modal panel (demo host UI, not plugin code) ---- */
+    .demo-settings-gear { font-size: 15px; }
+    .demo-settings-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 2500;              /* above Leaflet's control layer (1000) */
+      background: rgba(0, 0, 0, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .demo-settings-panel {
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #333;
+      min-width: 340px;
+      max-width: 90%;
+    }
+    .demo-settings-panel h3 {
+      font-size: 14px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .demo-settings-close {
+      cursor: pointer;
+      color: #888;
+      font-size: 15px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .demo-settings-close:hover { background: #f0f0f0; color: #333; }
+    .demo-settings-row { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
+    .demo-settings-row > .demo-settings-key { width: 80px; flex: none; color: #666; }
+    .demo-settings-row label { cursor: pointer; margin-right: 12px; white-space: nowrap; }
+    .demo-settings-input {
+      flex: 1;
+      padding: 4px 6px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      font-size: 12px;
+      min-width: 0;
+    }
+    .demo-settings-status {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 4px;
+      background: #f6f8fa;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #555;
+    }
+    .demo-settings-status .on { color: #1a7f37; font-weight: bold; }
+    .demo-settings-status .off { color: #888; }
+    .demo-settings-status .warn { color: #b45309; font-weight: bold; }
+    .demo-settings-hint { color: #999; font-size: 11px; line-height: 1.5; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -94,18 +156,205 @@
   var map = L.map('map', {
     center: [39.91, 116.41],
     zoom: 14,
-    zoomControl: true,
+    zoomControl: false,       // re-added below, so the settings gear sits above it
     preferCanvas: true,
   });
 
-  // Base tile layer
-  var baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
-  }).addTo(map);
+  // ===== Basemap sources =====
+  // Two axes decide the coordinate behaviour:
+  //   source.datum — the datum the tiles are drawn in (GCJ-02 for 高德/AMap)
+  //   dataDatum    — the datum of the input track data (settings panel)
+  // When they differ, TrackReplay converts the data once, at parse time, so
+  // everything on the map (tracks, points, events, indicators) lines up with
+  // the tiles and keeps working in one consistent frame.
+  var BASEMAP_SOURCES = {
+    osm: {
+      label: 'OpenStreetMap',
+      datum: 'wgs84',
+      keyHint: '该来源无需 API Key',
+      styles: [
+        { id: 'osm-standard', label: '标准', create: function () {
+          return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19,
+          });
+        } },
+        { id: 'carto-positron', label: '浅色 (Carto)', create: function () {
+          return L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            subdomains: 'abcd', maxZoom: 20, detectRetina: true,
+          });
+        } },
+        { id: 'carto-dark', label: '深色 (Carto)', create: function () {
+          return L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            subdomains: 'abcd', maxZoom: 20, detectRetina: true,
+          });
+        } },
+        { id: 'esri-imagery', label: '卫星 (Esri)', create: function () {
+          return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
+            maxZoom: 19,
+          });
+        } },
+      ],
+    },
+    amap: {
+      label: '高德地图',
+      datum: 'gcj02',           // 高德 tiles are rendered in GCJ-02 (火星坐标系)
+      keyHint: '高德栅格瓦片接口通常无需 key，可留空',
+      styles: [
+        { id: 'amap-vector', label: '标准', create: function (key) {
+          return L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}' + keyParam('key', key), {
+            subdomains: ['1', '2', '3', '4'], maxNativeZoom: 18, maxZoom: 19, attribution: '&copy; 高德地图',
+          });
+        } },
+        { id: 'amap-satellite', label: '卫星', create: function (key) {
+          return L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}' + keyParam('key', key), {
+            subdomains: ['1', '2', '3', '4'], maxNativeZoom: 18, maxZoom: 19, attribution: '&copy; 高德地图',
+          });
+        } },
+        { id: 'amap-hybrid', label: '卫星 + 路网', create: function (key) {
+          var sat = L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}' + keyParam('key', key), {
+            subdomains: ['1', '2', '3', '4'], maxNativeZoom: 18, maxZoom: 19, attribution: '&copy; 高德地图',
+          });
+          var roads = L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=8&x={x}&y={y}&z={z}' + keyParam('key', key), {
+            subdomains: ['1', '2', '3', '4'], maxNativeZoom: 18, maxZoom: 19,
+          });
+          return L.layerGroup([sat, roads]);
+        } },
+      ],
+    },
+    tianditu: {
+      label: '天地图',
+      datum: 'wgs84',           // CGCS2000 ≈ WGS-84 — GPS data needs no conversion
+      keyRequired: true,        // tk from tianditu.gov.cn (free registration)
+      keyHint: '必填：tianditu.gov.cn 免费注册获取 tk（注意 referrer 绑定）',
+      styles: [
+        { id: 'tdt-vector', label: '矢量', create: function (key) {
+          return tdtGroup('vec', 'cva', 18, key);
+        } },
+        { id: 'tdt-imagery', label: '影像', create: function (key) {
+          return tdtGroup('img', 'cia', 18, key);
+        } },
+        { id: 'tdt-terrain', label: '地形', create: function (key) {
+          return tdtGroup('ter', 'cta', 14, key);
+        } },
+      ],
+    },
+  };
+
+  // The key field is generic: appended to the tile URL when non-empty, so a
+  // provider that grows a key requirement needs no code change. The parameter
+  // name is per provider (高德: key, 天地图: tk).
+  function keyParam(name, key) { return key ? '&' + name + '=' + encodeURIComponent(key) : ''; }
+
+  // 天地图 WMTS: every style is a base layer plus its annotation layer
+  // (vec+cva / img+cia / ter+cta), both on the web-mercator tile matrix set.
+  function tdtGroup(baseLayer, labelLayer, maxNativeZoom, key) {
+    var mk = function (layer) {
+      return L.tileLayer('https://t{s}.tianditu.gov.cn/' + layer + '_w/wmts' +
+        '?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=' + layer + '&STYLE=default' +
+        '&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}' + keyParam('tk', key), {
+        subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+        maxNativeZoom: maxNativeZoom, maxZoom: 19,
+        attribution: '&copy; 天地图',
+      });
+    };
+    return L.layerGroup([mk(baseLayer), mk(labelLayer)]);
+  }
+
+  // ===== Settings (persisted in localStorage) =====
+  var SETTINGS_KEY = 'tr-demo-settings';
+  var settings = loadSettings();
+  var baseLayers = {};        // styleId → L.Layer, for the active source
+  var replay = null;
+
+  function loadSettings() {
+    var s = {};
+    try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { s = {}; }
+    return {
+      sourceId: BASEMAP_SOURCES[s.sourceId] ? s.sourceId : 'osm',
+      styles: s.styles || {},                            // sourceId → remembered styleId
+      dataDatum: s.dataDatum === 'gcj02' ? 'gcj02' : 'wgs84',
+      keys: s.keys || {},                                // sourceId → API key
+    };
+  }
+  function saveSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* ignore */ }
+  }
+  function currentSource() { return BASEMAP_SOURCES[settings.sourceId]; }
+  function currentKey() { return settings.keys[settings.sourceId] || ''; }
+  function activeStyleId() {
+    var styles = currentSource().styles;
+    var wanted = settings.styles[settings.sourceId];
+    for (var i = 0; i < styles.length; i++) { if (styles[i].id === wanted) { return wanted; } }
+    return styles[0].id;
+  }
+  function buildBaseLayers() {
+    baseLayers = {};
+    var styles = currentSource().styles;
+    var key = currentKey();
+    for (var i = 0; i < styles.length; i++) {
+      baseLayers[styles[i].id] = styles[i].create(key);
+    }
+  }
+  function baseLayerList() {
+    var styles = currentSource().styles;
+    var out = [];
+    for (var i = 0; i < styles.length; i++) {
+      out.push({ label: styles[i].label, layer: baseLayers[styles[i].id] });
+    }
+    return out;
+  }
+  function styleIdOf(layer) {
+    for (var id in baseLayers) { if (baseLayers[id] === layer) { return id; } }
+    return null;
+  }
+
+  // Remove whichever style layer of the CURRENT source is on the map. The user
+  // may have switched styles in the layer tree's radio group, so a cached
+  // "active layer" reference would go stale — scan the registry instead.
+  function removeBaseLayers() {
+    for (var id in baseLayers) {
+      if (map.hasLayer(baseLayers[id])) { map.removeLayer(baseLayers[id]); }
+    }
+  }
+
+  // Remember the basemap style picked in the layer tree's radio group.
+  // (Watching layeradd is provider-agnostic — it doesn't depend on the layer
+  // control firing baselayerchange.)
+  map.on('layeradd', function (e) {
+    var id = styleIdOf(e.layer);
+    if (id) { settings.styles[settings.sourceId] = id; saveSettings(); }
+  });
+
+  // Initial basemap from the persisted settings
+  buildBaseLayers();
+  map.addLayer(baseLayers[activeStyleId()]);
 
   // Add scale control
   L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
+
+  // Settings gear (top-left, above the zoom control) — opens a modal panel
+  var SettingsControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function () {
+      var wrap = L.DomUtil.create('div', 'leaflet-bar');
+      var link = L.DomUtil.create('a', 'demo-settings-gear', wrap);
+      link.href = '#';
+      link.title = '设置';
+      link.setAttribute('aria-label', '设置');
+      link.innerHTML = '&#9881;';
+      L.DomEvent.on(link, 'click', function (ev) {
+        L.DomEvent.stop(ev);
+        openSettingsPanel();
+      });
+      return wrap;
+    },
+  });
+  new SettingsControl().addTo(map);
+  L.control.zoom({ position: 'topleft' }).addTo(map);
 
   // Fullscreen (Leaflet.fullscreen)
   L.control.fullscreen({
@@ -144,34 +393,217 @@
     secondaryAreaUnit: 'hectares',
   }).addTo(map);
 
-  // ===== Initialize TrackReplay =====
-  var replay = L.trackReplay(map, trackData, {
-    colorMode: 'fixed',       // 'fixed' | 'adaptive' | 'custom'
-    speed: 1,
-    loop: false,
-    tickLen: 100,             // smooth 10fps
-    showControls: true,
-    showTimeline: true,
-    showLegend: true,
-    showViewFollow: true,
-    // Each display element of every object gets its own toggleable layer
-    elementLabels: {
-      track: '轨迹',
-      points: '节点',
-      static: '静态',
-      events: '事件',
-      traveled: '已行进',
-      untraveled: '未行进',
-      indicator: '箭头',
-    },
-    // Batch control: one tri-state checkbox per element type, for all objects
-    showElementToggles: true,
-    elementTogglesTitle: '批量',
-    // Batch label display control (rows = objects, columns = element types):
-    // checking a cell batch-opens those existing popups
-    showInfoLabels: true,
-    infoLabelsTitle: '批量标签',
-  });
+  // ===== TrackReplay =====
+  // (Re)create the replay instance. Called at startup and again whenever the
+  // basemap source or the data datum changes — both decide the coordinate
+  // frame the input data has to be converted into, so the layers are rebuilt.
+  function createReplay() {
+    replay = L.trackReplay(map, trackData, {
+      colorMode: 'fixed',       // 'fixed' | 'adaptive' | 'custom'
+      speed: 1,
+      loop: false,
+      tickLen: 100,             // smooth 10fps
+      showControls: true,
+      showTimeline: true,
+      showLegend: true,
+      showViewFollow: true,
+      // ---- Coordinate frames (see the GCJ-02 note above) ----
+      dataDatum: settings.dataDatum,      // datum of the input track data
+      mapDatum: currentSource().datum,    // datum of the active basemap
+      // Basemap styles appear as the layer tree's radio group ("底图")
+      baseLayers: baseLayerList(),
+      baseLayersLabel: '底图',
+      // Each display element of every object gets its own toggleable layer
+      elementLabels: {
+        track: '轨迹',
+        points: '节点',
+        static: '静态',
+        events: '事件',
+        traveled: '已行进',
+        untraveled: '未行进',
+        indicator: '箭头',
+      },
+      // Batch control: one tri-state checkbox per element type, for all objects
+      showElementToggles: true,
+      elementTogglesTitle: '批量',
+      // Batch label display control (rows = objects, columns = element types):
+      // checking a cell batch-opens those existing popups
+      showInfoLabels: true,
+      infoLabelsTitle: '批量标签',
+    });
+
+    // ===== Log events =====
+    replay.on('start', function (d) { console.log('[trackreplay] start', d.time); });
+    replay.on('pause', function (d) { console.log('[trackreplay] pause', d.time); });
+    replay.on('stop', function (d) { console.log('[trackreplay] stop', d.time); });
+    replay.on('finished', function (d) { console.log('[trackreplay] finished', d.time); });
+  }
+
+  // Rebuild the replay, keeping the playback time and run state.
+  function rebuildReplay() {
+    var wasPlaying = replay && replay.getState() === 'playing';
+    var t = replay ? replay.getCurrentTime() : null;
+    if (replay) { replay.destroy(); replay = null; }
+    createReplay();
+    if (t !== null) {
+      replay.seek(t);
+      if (wasPlaying) { replay.play(); }
+    }
+  }
+
+  // Switch basemap source: swap the tiles, then rebuild the replay (the map
+  // frame's datum changed, so the data must be re-projected).
+  function switchSource(sourceId) {
+    if (!BASEMAP_SOURCES[sourceId] || sourceId === settings.sourceId) { return; }
+    settings.sourceId = sourceId;
+    saveSettings();
+    removeBaseLayers();
+    buildBaseLayers();
+    map.addLayer(baseLayers[activeStyleId()]);
+    rebuildReplay();
+    updateSettingsPanel();
+  }
+
+  // Change the declared datum of the input data (WGS-84 ↔ GCJ-02)
+  function switchDataDatum(datum) {
+    if (datum === settings.dataDatum) { return; }
+    settings.dataDatum = datum;
+    saveSettings();
+    rebuildReplay();
+    updateSettingsPanel();
+  }
+
+  // Apply a new API key for the active source
+  function applyKey(value) {
+    if (value === currentKey()) { return; }
+    settings.keys[settings.sourceId] = value;
+    saveSettings();
+    removeBaseLayers();
+    buildBaseLayers();
+    map.addLayer(baseLayers[activeStyleId()]);
+    rebuildReplay();
+    updateSettingsPanel();
+  }
+
+  createReplay();
+
+  // ===== Settings panel (modal — the map behind it is inert) =====
+  var panelOverlay = null;
+
+  function openSettingsPanel() {
+    if (panelOverlay) { return; }
+    // Full-size layer inside the map container: it swallows mouse/wheel/touch
+    // before they reach Leaflet, so nothing behind it reacts while it is open.
+    panelOverlay = L.DomUtil.create('div', 'demo-settings-overlay', map.getContainer());
+    L.DomEvent.disableClickPropagation(panelOverlay);
+    L.DomEvent.disableScrollPropagation(panelOverlay);
+    L.DomEvent.on(panelOverlay, 'click', function (e) {
+      if (e.target === panelOverlay) { closeSettingsPanel(); }   // click the backdrop
+    });
+    var panel = L.DomUtil.create('div', 'demo-settings-panel', panelOverlay);
+    buildSettingsPanel(panel);
+    document.addEventListener('keydown', onSettingsKeydown);
+  }
+
+  function closeSettingsPanel() {
+    document.removeEventListener('keydown', onSettingsKeydown);
+    if (panelOverlay) { L.DomUtil.remove(panelOverlay); panelOverlay = null; }
+  }
+
+  function onSettingsKeydown(e) {
+    if (e.key === 'Escape') { closeSettingsPanel(); }
+  }
+
+  function updateSettingsPanel() {
+    if (!panelOverlay) { return; }
+    var panel = panelOverlay.querySelector('.demo-settings-panel');
+    if (panel) { panel.innerHTML = ''; buildSettingsPanel(panel); }
+  }
+
+  function settingsRow(panel, keyText) {
+    var row = L.DomUtil.create('div', 'demo-settings-row', panel);
+    var key = L.DomUtil.create('span', 'demo-settings-key', row);
+    key.textContent = keyText;
+    return row;
+  }
+
+  function radioChoice(parent, name, choices, value, onChange) {
+    for (var i = 0; i < choices.length; i++) {
+      var lab = L.DomUtil.create('label', '', parent);
+      var input = L.DomUtil.create('input', '', lab);
+      input.type = 'radio';
+      input.name = name;
+      input.value = choices[i].value;
+      input.checked = choices[i].value === value;
+      if (onChange) {
+        L.DomEvent.on(input, 'change', (function (v) {
+          return function () { onChange(v); };
+        })(choices[i].value));
+      }
+      lab.appendChild(document.createTextNode(' ' + choices[i].label));
+    }
+  }
+
+  function datumLabel(d) { return d === 'gcj02' ? 'GCJ-02（火星）' : 'WGS-84'; }
+
+  function buildSettingsPanel(panel) {
+    var head = L.DomUtil.create('h3', '', panel);
+    head.appendChild(document.createTextNode('设置'));
+    var closeBtn = L.DomUtil.create('span', 'demo-settings-close', head);
+    closeBtn.textContent = '✕';
+    closeBtn.title = '关闭 (Esc)';
+    L.DomEvent.on(closeBtn, 'click', closeSettingsPanel);
+
+    // 地图来源 — switching sources also switches the map frame's datum
+    var sourceRow = settingsRow(panel, '地图来源');
+    var sourceChoices = [];
+    for (var id in BASEMAP_SOURCES) {
+      var src = BASEMAP_SOURCES[id];
+      sourceChoices.push({
+        value: id,
+        label: src.label + (src.datum === 'gcj02' ? ' (GCJ-02)' : ' (WGS-84)') +
+          (src.keyRequired ? ' · 需 key' : ''),
+      });
+    }
+    radioChoice(sourceRow, 'demo-source', sourceChoices, settings.sourceId, function (v) { switchSource(v); });
+
+    // API Key — stored per source; appended to tile URLs when non-empty
+    var keyRow = settingsRow(panel, currentSource().keyRequired ? 'API Key *' : 'API Key');
+    var keyInput = L.DomUtil.create('input', 'demo-settings-input', keyRow);
+    keyInput.type = 'text';
+    keyInput.placeholder = currentSource().keyHint || '';
+    keyInput.value = currentKey();
+    L.DomEvent.on(keyInput, 'change', function () { applyKey(keyInput.value.trim()); });
+
+    // 数据坐标系 — the datum the INPUT data is in
+    var datumRow = settingsRow(panel, '数据坐标系');
+    radioChoice(datumRow, 'demo-datum', [
+      { value: 'wgs84', label: 'WGS-84 (GPS)' },
+      { value: 'gcj02', label: 'GCJ-02 (火星)' },
+    ], settings.dataDatum, function (v) { switchDataDatum(v); });
+
+    // 坐标转换 — derived, not an independent switch: it is exactly
+    // (底图坐标系 ≠ 数据坐标系). Picking 高德 (GCJ-02) turns it on
+    // automatically; picking a WGS-84 source turns it off.
+    var mapDatum = currentSource().datum;
+    var converting = mapDatum !== settings.dataDatum;
+    var missingKey = currentSource().keyRequired && !currentKey();
+    var status = L.DomUtil.create('div', 'demo-settings-status', panel);
+    status.innerHTML =
+      '底图坐标系：<b>' + datumLabel(mapDatum) + '</b>　数据坐标系：<b>' + datumLabel(settings.dataDatum) + '</b><br>' +
+      '坐标转换：' + (converting
+        ? '<span class="on">开</span> · ' + datumLabel(settings.dataDatum) + ' → ' + datumLabel(mapDatum)
+        : '<span class="off">关</span> · 两者相同，无需转换') +
+      (missingKey
+        ? '<br><span class="warn">该来源必须填写 tk：请在上方 API Key 栏填入后生效（当前瓦片不会加载）</span>'
+        : '');
+
+    var hint = L.DomUtil.create('div', 'demo-settings-hint', panel);
+    hint.innerHTML =
+      '底图风格（标准 / 卫星 / 深色…）用右上角图层控件的“底图”单选组切换。<br>' +
+      '底图与数据坐标系一致时原生对齐；不一致时数据在解析时转换一次。地图上' +
+      '显示、量测得到的坐标始终是<b>底图坐标系</b>。设置会被记住（localStorage）。';
+  }
 
   // ===== Keyboard shortcuts =====
   document.addEventListener('keydown', function (e) {
@@ -218,12 +650,6 @@
         break;
     }
   });
-
-  // ===== Log events =====
-  replay.on('start', function (d) { console.log('[trackreplay] start', d.time); });
-  replay.on('pause', function (d) { console.log('[trackreplay] pause', d.time); });
-  replay.on('stop', function (d) { console.log('[trackreplay] stop', d.time); });
-  replay.on('finished', function (d) { console.log('[trackreplay] finished', d.time); });
 
   console.log('Leaflet.TrackReplay demo ready!');
   console.log('  Space = Play/Pause');

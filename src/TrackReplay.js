@@ -29,6 +29,8 @@ import { createColorLegend } from './controls/ColorLegend.js';
 import { createElementToggles } from './controls/ElementToggles.js';
 import { createInfoLabels } from './controls/InfoLabels.js';
 
+import { wgs84ToGcj02, gcj02ToWgs84, outOfChina } from './utils/GCJ02.js';
+
 /**
  * Main TrackReplay orchestrator.
  *
@@ -71,6 +73,14 @@ import { createInfoLabels } from './controls/InfoLabels.js';
  *        existing popups — the same popups a click shows)
  * @param {string} [options.infoLabelsPosition='topright'] - label control corner
  * @param {string} [options.infoLabelsTitle='Labels'] - label control title
+ * @param {string} [options.dataDatum='wgs84'] - datum of the input coordinates
+ *        ('wgs84' | 'gcj02'). Converted to `mapDatum` while parsing, so every
+ *        layer works in the map's own frame (see GCJ-02 note in README)
+ * @param {string} [options.mapDatum='wgs84']  - datum of the active basemap;
+ *        use 'gcj02' for AMap/高德 (and other GCJ-02) tiles
+ * @param {Object[]} [options.baseLayers]      - [{ label, layer }] basemaps for
+ *        the layer tree's radio group (host owns the tile layers)
+ * @param {string} [options.baseLayersLabel='Basemap'] - label of that group
  * @returns {L.TrackReplay}
  */
 export function trackReplay(map, featureCollection, options) {
@@ -82,17 +92,21 @@ export function trackReplay(map, featureCollection, options) {
   });
 
   // ---- 2. Parse Data ----
-  var parsed = parseFeatureCollection(featureCollection, colorMapper, {
+  // Datum: the input data is converted once, here, into the map's frame; every
+  // downstream layer (track, points, events, routes, indicators) then works in
+  // one consistent coordinate system.
+  var parseOptions = {
     bearingTransform: options.bearingTransform,
-  });
+    dataDatum: options.dataDatum,
+    mapDatum: options.mapDatum,
+  };
+  var parsed = parseFeatureCollection(featureCollection, colorMapper, parseOptions);
 
   // If adaptive mode, initialize stats from all speeds
   if (options.colorMode === 'adaptive' && parsed.allSpeeds.length > 0) {
     colorMapper.initStats(parsed.allSpeeds);
     // Re-parse with initialized color mapper
-    parsed = parseFeatureCollection(featureCollection, colorMapper, {
-      bearingTransform: options.bearingTransform,
-    });
+    parsed = parseFeatureCollection(featureCollection, colorMapper, parseOptions);
   }
 
   // ---- 3. Time Engine ----
@@ -305,6 +319,8 @@ export function trackReplay(map, featureCollection, options) {
   // own entry in the layer tree
   var layerControl = createLayerControl(map, parsed.layerFeatures, allLayers, {
     collapsed: options.layerControlCollapsed !== false,
+    baseLayers: options.baseLayers,
+    baseLayersLabel: options.baseLayersLabel,
   });
   map.addControl(layerControl);
 
@@ -456,6 +472,8 @@ export function trackReplay(map, featureCollection, options) {
     controlBar: controlBar,
     legend: legend,
     parsed: parsed,
+    dataDatum: options.dataDatum || 'wgs84',
+    mapDatum: options.mapDatum || 'wgs84',
 
     /** Start playback */
     play: function () { timeEngine.play(); },
@@ -594,6 +612,14 @@ if (typeof L !== 'undefined') {
     ColorLegend: { createColorLegend: createColorLegend },
     ElementToggles: { createElementToggles: createElementToggles },
     InfoLabels: { createInfoLabels: createInfoLabels },
+  };
+
+  L.TrackReplay.Utils = {
+    GCJ02: {
+      wgs84ToGcj02: wgs84ToGcj02,
+      gcj02ToWgs84: gcj02ToWgs84,
+      outOfChina: outOfChina,
+    },
   };
 
   // Factory function
