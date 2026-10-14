@@ -48,6 +48,26 @@ function collectLabelTargets(elementLayer) {
 }
 
 /**
+ * Switch a popup between "many open at once" mode and the default behavior:
+ *  - autoClose: a new popup would close the previous one
+ *  - autoPan:  opening dozens would pan the map around
+ *  - closeOnClick: Leaflet fires a synthetic `preclick` before every map
+ *    click and closes popups on it (map option closePopupOnClick)
+ */
+function setManyOpenMode(popup, on) {
+  if (!popup) { return; }
+  if (on) {
+    popup.options.autoClose = false;
+    popup.options.autoPan = false;
+    popup.options.closeOnClick = false;
+  } else {
+    popup.options.autoClose = true;
+    popup.options.autoPan = true;
+    delete popup.options.closeOnClick; // fall back to the map default
+  }
+}
+
+/**
  * Create the batch label display control (collapsed by default).
  *
  * @param {Object} allLayers - key → { layerPath, elements: [{ key, label, layer }] }
@@ -79,7 +99,11 @@ export function createInfoLabels(allLayers, options) {
       var targets = collectLabelTargets(element.layer);
       if (!targets.length) { continue; }
 
-      row.cells[element.key] = { label: element.label, targets: targets };
+      row.cells[element.key] = {
+        label: element.label,
+        targets: targets,
+        layer: element.layer, // kept so replaceLayer() can find this cell
+      };
       if (!seenColumn[element.key]) {
         seenColumn[element.key] = { key: element.key, label: element.label };
         columns.push(seenColumn[element.key]);
@@ -133,6 +157,13 @@ export function createInfoLabels(allLayers, options) {
         if (!entry) { return; }
         if (e.type === 'layeradd') {
           if (self._state[entry.rowKey][entry.elementKey]) {
+            // A layer that comes onto the map while its cell is checked — a
+            // rebuilt element after a cluster/scatter switch, or a point
+            // de-clustering on zoom — was never seen by _applyCell, so its
+            // popup still carries the default single-popup options. Put it
+            // in "many open at once" mode first, or it would close the
+            // previous one instead of joining it.
+            setManyOpenMode(e.layer.getPopup(), true);
             e.layer.openPopup();
           }
         } else {
@@ -219,29 +250,50 @@ export function createInfoLabels(allLayers, options) {
 
       for (var i = 0; i < cell.targets.length; i++) {
         var target = cell.targets[i];
-        var popup = target.popup;
 
         if (on) {
-          // These popups are the map's own popup component, so neutralise the
-          // behaviours that fight "many open at once":
-          //  - autoClose: a new popup would close the previous one
-          //  - autoPan:  opening dozens would pan the map around
-          //  - closeOnClick: Leaflet fires a synthetic `preclick` before every
-          //    map click and closes popups on it (map option closePopupOnClick)
-          // All three are restored when the cell is switched off.
-          popup.options.autoClose = false;
-          popup.options.autoPan = false;
-          popup.options.closeOnClick = false;
+          setManyOpenMode(target.popup, true);
           target.layer.openPopup();
         } else {
           target.layer.closePopup();
-          popup.options.autoClose = true;
-          popup.options.autoPan = true;
-          delete popup.options.closeOnClick; // fall back to the map default
+          setManyOpenMode(target.popup, false);
         }
       }
 
       this._updateTitle();
+    },
+
+    /**
+     * Swap one element layer for a rebuilt one (e.g. the background nodes
+     * layer re-rendered cluster ↔ scatter). The matching cells re-collect
+     * their label targets from the new layer and the stamp index is rebuilt;
+     * cell checked-state is kept, so the map's layeradd hook re-opens those
+     * popups as the new markers come onto the map.
+     */
+    replaceLayer: function (oldLayer, nextLayer) {
+      if (!this._targetIndex) { return; }
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        for (var key in row.cells) {
+          if (!row.cells.hasOwnProperty(key)) { continue; }
+          var cell = row.cells[key];
+          if (cell.layer !== oldLayer) { continue; }
+
+          for (var t = 0; t < cell.targets.length; t++) {
+            delete this._targetIndex[L.stamp(cell.targets[t].layer)];
+          }
+
+          cell.layer = nextLayer;
+          cell.targets = collectLabelTargets(nextLayer);
+
+          for (var t2 = 0; t2 < cell.targets.length; t2++) {
+            this._targetIndex[L.stamp(cell.targets[t2].layer)] = {
+              rowKey: row.key,
+              elementKey: key,
+            };
+          }
+        }
+      }
     },
 
     /** Switch every available cell of one row. */

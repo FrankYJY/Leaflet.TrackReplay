@@ -13,6 +13,10 @@
 - 🎨 **Speed-based coloring** — 3 modes: fixed (Turbo ramp over a configurable range),
   adaptive (P5–P95), custom (branca-style)
 - 📍 **Point clustering** — marker cluster for dense track points, every data point kept (via Leaflet.markercluster)
+- 🌌 **Background nodes** — many standalone location points unrelated to any
+  time sequence (`element: "background_nodes"`), drawn as clickable dots
+  *beneath* the tracks — scatter by default, clustering opt-in — with per-node
+  popups and batch controls
 - 🏃 **Moving indicators** — animated markers with bearing-based rotation
 - 🛤️ **Dynamic route coloring** — traveled (red) / untraveled (blue) edge rendering
 - 👁️ **View following** — auto-pan to follow moving objects (latest/random/named/off)
@@ -114,7 +118,12 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `movingIcon` | `L.Icon \| L.DivIcon` | — | Custom icon for moving indicators |
 | `traveledStyle` | `object` | `{color:'#e74c3c',weight:4}` | Style for traveled route edge |
 | `untraveledStyle` | `object` | `{color:'#3498db',weight:4}` | Style for untraveled route edge |
-| `elementLabels` | `object` | English defaults | Labels for the per-element layers: `{track, points, static, events, traveled, untraveled, indicator}` |
+| `elementLabels` | `object` | English defaults | Labels for the per-element layers: `{track, points, static, events, background_nodes, traveled, untraveled, indicator}` |
+| `backgroundNodesOptions` | `object` | — | Options for the `background_nodes` element: `{ style, cluster (default false — scatter), clusterOptions }` |
+| `showClusterScatterControl` | `boolean` | `true` | Show the cluster / scatter settings panel (only when the data has background nodes) |
+| `clusterScatterPosition` | `string` | `'topright'` | Corner of that panel |
+| `clusterScatterTitle` | `string` | `'Cluster / Scatter'` | Title of that panel |
+| `clusterScatterLabels` | `object` | `{cluster:'Cluster', scatter:'Scatter'}` | Option labels inside the background-nodes section |
 | `showElementToggles` | `boolean` | `true` | Show the batch control (one tri-state checkbox per element type, across all objects) |
 | `elementTogglesPosition` | `string` | `'topright'` | Corner for the batch control |
 | `elementTogglesTitle` | `string` | `'Batch'` | Title of the batch control |
@@ -280,6 +289,74 @@ Point features render as **rings**: an unfilled `L.circleMarker` whose radius is
 - Geographic rings (radius in meters) or ring *bands* (polygon with an inner ring, folium's donut
   technique) already work through the plain GeoJSON path — a `Polygon` with two coordinate rings
   renders as a donut today.
+
+### Background nodes (`background_nodes`)
+
+Many standalone location points that are **not tied to any time sequence** — sample
+points, POIs, coverage readings — used as context *behind* the tracks. They stay
+plain GeoJSON; the reserved element name `background_nodes` decides how they render:
+
+```json
+// Form ① — one compact feature carrying all points (use for tens of thousands)
+{ "type": "Feature",
+  "geometry": { "type": "MultiPoint",
+                "coordinates": [[116.40, 39.90], [116.41, 39.91], ...] },
+  "properties": {
+    "layerPath": ["background", "samples"],
+    "element": "background_nodes",
+    "popups": ["node 1", "node 2", ...],     // optional, length = coordinates
+    "styles": [{...}, ...],                  // optional per-point style
+    "style": { "fillColor": "#666" }         // optional base style
+  } }
+
+// Form ② — one Point feature per location (may be mixed with form ①)
+{ "type": "Feature",
+  "geometry": { "type": "Point", "coordinates": [116.40, 39.90] },
+  "properties": {
+    "layerPath": ["background", "stations"],
+    "element": "background_nodes",
+    "popup": "station 1"
+  } }
+```
+
+- **Rendering**: small filled dots (`{radius: 4, fillColor: '#6b7785'}`) by default;
+  `properties.style` (and per-point `styles[i]`) override them.
+- **Clickable, like track points**: the dots render through the same vector
+  renderer as the tracks, so Leaflet's normal hit-testing applies — clicking a
+  node opens its popup, exactly as clicking a track point does. (A dedicated
+  low pane would paint beneath the tracks but never receive clicks, because
+  the tracks' canvas covers it.)
+- **Z-order**: each dot is sent to the back of the shared renderer whenever it
+  is (re)added, so dots draw **beneath the tracks**; their cluster bubbles sit
+  in the marker pane — the same layer track-point clusters use, so clicking a
+  bubble zooms in as usual.
+- **Scatter by default**: every node is drawn as its own dot. Clustering is
+  opt-in — `backgroundNodesOptions: { cluster: true }` groups dense clouds with
+  Leaflet.markercluster (with spiderfy, like track points), the right choice
+  for tens of thousands of nodes.
+- **Runtime switch**: the *Cluster / Scatter* settings panel (below) carries a
+  background-nodes section with a **Cluster / Scatter** choice. Switching
+  rebuilds the element in place — layer-tree, batch-toggle and batch-label
+  references are re-pointed, map visibility is preserved, and checked label
+  cells re-open their popups on the new layer.
+- **Batch control & labels**: same as every element — one tree entry per object,
+  one batch-control row for the element type across all objects, and one
+  batch-label column (present whenever the nodes carry popups).
+
+```javascript
+L.trackReplay(map, data, {
+  // defaults shown; all optional
+  backgroundNodesOptions: {
+    style: { radius: 4, fillColor: '#6b7785' },
+    cluster: false, // scatter (default) — true groups dense clouds
+  },
+});
+```
+
+Note: `background_nodes` is a **reserved element name** — a bucket with this name
+always renders through this layer (Point/MultiPoint geometries; other geometry
+types are skipped with a console warning) and cannot be used as a plain static
+bucket.
 
 ### Batch label display
 
@@ -461,7 +538,8 @@ python server.py
 │   │   ├── PointClusterLayer.js# Marker cluster for points
 │   │   ├── MovingIndicator.js  # Animated moving marker
 │   │   ├── DynamicRoute.js     # Traveled/untraveled route
-│   │   └── StaticLayer.js      # Regular GeoJSON layer
+│   │   ├── StaticLayer.js      # Regular GeoJSON layer
+│   │   └── BackgroundNodesLayer.js # Low-pane cluster layer for background nodes
 │   ├── controls/
 │   │   ├── PlaybackControls.js # Play/pause/stop/speed UI
 │   │   ├── TimelineControl.js  # Progress slider + time editor

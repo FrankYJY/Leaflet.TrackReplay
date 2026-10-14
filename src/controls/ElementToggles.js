@@ -126,6 +126,21 @@ export function createElementToggles(allLayers, options) {
       }
     },
 
+    /**
+     * Swap one element layer for a rebuilt one (e.g. the background nodes
+     * layer re-rendered cluster ↔ scatter). All rows referring to the old
+     * layer are re-pointed at the new one and the tri-state counts refresh.
+     */
+    replaceLayer: function (oldLayer, nextLayer) {
+      for (var i = 0; i < rows.length; i++) {
+        var layers = rows[i].layers;
+        for (var j = 0; j < layers.length; j++) {
+          if (layers[j] === oldLayer) { layers[j] = nextLayer; }
+        }
+      }
+      this.updateStates();
+    },
+
     /** Refresh tri-state checkboxes and counts from the map state. */
     updateStates: function () {
       var map = this._map;

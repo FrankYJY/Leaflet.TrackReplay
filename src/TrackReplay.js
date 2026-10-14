@@ -20,6 +20,7 @@ import { createPointClusterLayer } from './layers/PointClusterLayer.js';
 import { createMovingIndicator } from './layers/MovingIndicator.js';
 import { createDynamicRoute } from './layers/DynamicRoute.js';
 import { createStaticLayer } from './layers/StaticLayer.js';
+import { createBackgroundNodesLayer } from './layers/BackgroundNodesLayer.js';
 
 import { createPlaybackControls } from './controls/PlaybackControls.js';
 import { createTimelineControl } from './controls/TimelineControl.js';
@@ -28,6 +29,7 @@ import { createViewFollowControl } from './controls/ViewFollowControl.js';
 import { createColorLegend } from './controls/ColorLegend.js';
 import { createElementToggles } from './controls/ElementToggles.js';
 import { createInfoLabels } from './controls/InfoLabels.js';
+import { createClusterScatterControl } from './controls/ClusterScatterControl.js';
 
 import { wgs84ToGcj02, gcj02ToWgs84, outOfChina } from './utils/GCJ02.js';
 
@@ -63,7 +65,21 @@ import { wgs84ToGcj02, gcj02ToWgs84, outOfChina } from './utils/GCJ02.js';
  * @param {Object} [options.untraveledStyle]        - style for untraveled route
  * @param {Object} [options.movingIcon]             - custom icon for moving indicator
  * @param {Object} [options.elementLabels]          - labels for the per-element layers
- *        ({ track, points, static, events, traveled, untraveled, indicator })
+ *        ({ track, points, static, events, background_nodes, traveled,
+ *        untraveled, indicator })
+ * @param {Object} [options.backgroundNodesOptions]  - options for the
+ *        "background_nodes" element (many standalone location points, drawn
+ *        as clickable dots beneath the tracks; scatter by default):
+ *        { style, cluster (default false), clusterOptions }
+ * @param {boolean} [options.showClusterScatterControl=true] - the cluster /
+ *        scatter settings panel (only added when the data has background
+ *        nodes); its background-nodes section switches that element between
+ *        clustered and raw scatter rendering at runtime
+ * @param {string} [options.clusterScatterPosition='topright'] - control corner
+ * @param {string} [options.clusterScatterTitle='Cluster / Scatter'] - panel title
+ * @param {Object} [options.clusterScatterLabels] - { cluster, scatter } option
+ *        labels (defaults 'Cluster' / 'Scatter'; the section header reuses
+ *        elementLabels.background_nodes)
  * @param {boolean} [options.showElementToggles=true]     - batch show/hide control
  *        (one tri-state checkbox per element type, across all objects)
  * @param {string} [options.elementTogglesPosition='topright'] - control corner
@@ -126,6 +142,7 @@ export function trackReplay(map, featureCollection, options) {
   var layerGroups = {};  // key → parent FeatureGroup (logical container, not added to the map)
   var allLayers = {};    // key → { group, elements, ... }
   var staticLayers = []; // static context layers — sent to the back after build
+  var backgroundEntries = []; // { objectKey, features } — for cluster/scatter re-render
 
   var elLabels = options.elementLabels || {};
   var elementLabel = {
@@ -133,6 +150,7 @@ export function trackReplay(map, featureCollection, options) {
     points: elLabels.points || 'Points',
     static: elLabels.static || 'Static',
     events: elLabels.events || 'Events',
+    background_nodes: elLabels.background_nodes || 'Background nodes',
     traveled: elLabels.traveled || 'Traveled',
     untraveled: elLabels.untraveled || 'Untraveled',
     indicator: elLabels.indicator || 'Indicator',
@@ -177,7 +195,9 @@ export function trackReplay(map, featureCollection, options) {
 
     // Group non-timestamped features into element layers.
     // `properties.element` names the group (e.g. "events"); features without
-    // it land in the generic "static" element.
+    // it land in the generic "static" element. The name "background_nodes" is
+    // reserved: that bucket renders as a low-pane cluster point layer (see
+    // BackgroundNodesLayer) instead of the plain GeoJSON path.
     var staticBuckets = {};
     var bucketOrder = [];
 
@@ -193,7 +213,21 @@ export function trackReplay(map, featureCollection, options) {
 
     for (var sbi = 0; sbi < bucketOrder.length; sbi++) {
       var bucket = bucketOrder[sbi];
-      var staticLayer = createStaticLayer(staticBuckets[bucket], options.staticLayerOptions);
+      var staticLayer;
+
+      if (bucket === 'background_nodes') {
+        // Background nodes (reserved element name): many standalone location
+        // points, rendered through the scatter layer — clickable dots that
+        // draw beneath the tracks, cluster bubbles in the marker pane.
+        // The source features are remembered so the cluster/scatter control
+        // can rebuild this element in place.
+        backgroundEntries.push({ objectKey: key, features: staticBuckets[bucket] });
+        staticLayer = createBackgroundNodesLayer(
+          staticBuckets[bucket], options.backgroundNodesOptions);
+      } else {
+        staticLayer = createStaticLayer(staticBuckets[bucket], options.staticLayerOptions);
+      }
+
       group.addLayer(staticLayer);
       elements.push({
         key: bucket,
@@ -204,6 +238,7 @@ export function trackReplay(map, featureCollection, options) {
       // Only the generic "static" bucket is context (zones, areas) and goes to
       // the back; named buckets like "events" are annotations drawn on top so
       // their rings stay visible and clickable over the tracks.
+      // (background_nodes manages its own z-order through its pane.)
       if (bucket === 'static') {
         staticLayers.push(staticLayer);
       }
@@ -355,6 +390,99 @@ export function trackReplay(map, featureCollection, options) {
     }
   }
 
+  // ---- 7d. Cluster / scatter settings (background nodes) ----
+  // The panel's background-nodes section switches between clustered and raw
+  // scatter rendering. The mode is a construction-time property of the layer
+  // (MarkerClusterGroup vs plain FeatureGroup), so switching rebuilds that
+  // element in place and re-points every reference at the new layer.
+  var clusterScatterControl = null;
+  var markerClusterAvailable = typeof L !== 'undefined' && !!L.markerClusterGroup;
+  var backgroundCluster = markerClusterAvailable &&
+    !!(options.backgroundNodesOptions && options.backgroundNodesOptions.cluster === true);
+
+  /**
+   * Recreate the layer control so its bookkeeping follows the rebuilt layers.
+   *
+   * Leaflet's layer-control base class (which Layers.Tree extends) keeps its
+   * own registry keyed by the original layer objects — checkbox inputs store
+   * `stamp(layer)` ids, and a zoomend handler resolves them back to layers.
+   * Splitting that registry open to splice in a rebuilt layer is fragile
+   * across versions (a stale id crashes `_checkDisabledLayers` on the next
+   * zoom), so the control is simply rebuilt — it is constructed from
+   * `allLayers`, which already points at the new layers.
+   */
+  function rebuildLayerControl() {
+    if (layerControl && layerControl._map) {
+      map.removeControl(layerControl);
+    }
+    layerControl = createLayerControl(map, parsed.layerFeatures, allLayers, {
+      collapsed: options.layerControlCollapsed !== false,
+      baseLayers: options.baseLayers,
+      baseLayersLabel: options.baseLayersLabel,
+    });
+    map.addControl(layerControl);
+
+    // A re-added control lands at the end of its corner; put the tree back on
+    // top so the corner stack keeps its original order (tree, batch, labels…).
+    var corner = map._controlCorners[layerControl.getPosition()];
+    if (corner && layerControl.getContainer()) {
+      corner.insertBefore(layerControl.getContainer(), corner.firstChild);
+    }
+
+    if (instance) { instance.layerControl = layerControl; }
+  }
+
+  /**
+   * Rebuild every background nodes element with the given rendering mode,
+   * preserving whether each object's layer is currently shown on the map.
+   * The rebuilt layers are added after their controls were re-pointed, so
+   * checked batch-label cells re-open their popups via the layeradd hook.
+   */
+  function applyBackgroundMode(cluster) {
+    if (cluster === backgroundCluster) { return; }
+    backgroundCluster = cluster;
+
+    for (var i = 0; i < backgroundEntries.length; i++) {
+      var entry = backgroundEntries[i];
+      var owner = allLayers[entry.objectKey];
+      if (!owner) { continue; }
+      var els = owner.elements;
+
+      for (var j = 0; j < els.length; j++) {
+        if (els[j].key !== 'background_nodes') { continue; }
+
+        var oldLayer = els[j].layer;
+        var wasOn = map.hasLayer(oldLayer);
+        if (wasOn) { map.removeLayer(oldLayer); }
+
+        var nextLayer = createBackgroundNodesLayer(entry.features,
+          L.extend({}, options.backgroundNodesOptions, { cluster: cluster }));
+
+        els[j].layer = nextLayer;
+        if (elementToggles) { elementToggles.replaceLayer(oldLayer, nextLayer); }
+        if (infoLabels) { infoLabels.replaceLayer(oldLayer, nextLayer); }
+
+        if (wasOn) { map.addLayer(nextLayer); }
+      }
+    }
+
+    rebuildLayerControl();
+  }
+
+  if (backgroundEntries.length && options.showClusterScatterControl !== false) {
+    clusterScatterControl = createClusterScatterControl({
+      position: options.clusterScatterPosition || 'topright',
+      title: options.clusterScatterTitle || 'Cluster / Scatter',
+      sectionLabel: elementLabel.background_nodes,
+      clusterLabel: (options.clusterScatterLabels && options.clusterScatterLabels.cluster) || 'Cluster',
+      scatterLabel: (options.clusterScatterLabels && options.clusterScatterLabels.scatter) || 'Scatter',
+      clusterAvailable: markerClusterAvailable,
+      value: backgroundCluster ? 'cluster' : 'scatter',
+      onChange: function (mode) { applyBackgroundMode(mode === 'cluster'); },
+    });
+    map.addControl(clusterScatterControl);
+  }
+
   // ---- 8. View Follow ----
   var viewFollow = null;
   if (options.showViewFollow !== false) {
@@ -467,6 +595,7 @@ export function trackReplay(map, featureCollection, options) {
     layerControl: layerControl,
     elementToggles: elementToggles,
     infoLabels: infoLabels,
+    clusterScatterControl: clusterScatterControl,
     controls: controls,
     timeline: timeline,
     controlBar: controlBar,
@@ -567,6 +696,9 @@ export function trackReplay(map, featureCollection, options) {
       if (infoLabels && infoLabels._map) {
         map.removeControl(infoLabels);
       }
+      if (clusterScatterControl && clusterScatterControl._map) {
+        map.removeControl(clusterScatterControl);
+      }
       if (viewFollow) {
         if (viewFollow.control._map) {
           map.removeControl(viewFollow.control);
@@ -602,6 +734,7 @@ if (typeof L !== 'undefined') {
     MovingIndicator: { createMovingIndicator: createMovingIndicator },
     DynamicRoute: { createDynamicRoute: createDynamicRoute },
     StaticLayer: { createStaticLayer: createStaticLayer },
+    BackgroundNodesLayer: { createBackgroundNodesLayer: createBackgroundNodesLayer },
   };
 
   L.TrackReplay.Controls = {
@@ -612,6 +745,7 @@ if (typeof L !== 'undefined') {
     ColorLegend: { createColorLegend: createColorLegend },
     ElementToggles: { createElementToggles: createElementToggles },
     InfoLabels: { createInfoLabels: createInfoLabels },
+    ClusterScatterControl: { createClusterScatterControl: createClusterScatterControl },
   };
 
   L.TrackReplay.Utils = {

@@ -15,6 +15,7 @@ Then open http://localhost:8000 in your browser.
 
 import json
 import math
+import random
 import time
 from pathlib import Path
 
@@ -208,10 +209,73 @@ def generate_sample_data() -> dict:
                 ["visitor", "Bee"], bee_coords[60],
                 f"<b>Bee · 事件</b><br>{fmt_time(bee_times[60])}<br>节点 61",
                 style={"radius": 14}),
+            # Background nodes — many standalone location points, unrelated to
+            # any time sequence; their own low-pane cluster layer (under the
+            # tracks). Demos both data forms: one compact MultiPoint feature
+            # and individual Point features. Both share the reserved element
+            # name "background_nodes", so one batch row controls them all.
+            *background_nodes(),
         ],
     }
 
     return feature_collection
+
+
+def background_nodes() -> list:
+    """
+    Background node sample data (element "background_nodes").
+
+    Form 1 — one MultiPoint feature carrying all sample points plus a
+    popups[] array (compact; the form to use for tens of thousands of nodes).
+    Form 2 — individual Point features, one popup each.
+    """
+    rng = random.Random(42)
+    lat0, lng0 = 39.90, 116.40
+    km_per_deg_lat = 111.0
+    km_per_deg_lng = 111.0 * math.cos(math.radians(lat0))
+
+    # ---- Form 1: 240 sample points in three gaussian blobs ----
+    coords, popups = [], []
+    blobs = [(-0.9, -1.1), (1.0, 0.55), (-0.35, 1.4)]  # km offsets
+    for i in range(240):
+        bx, by = blobs[i % len(blobs)]
+        dx = bx + rng.gauss(0, 0.28)
+        dy = by + rng.gauss(0, 0.28)
+        coords.append([lng0 + dx / km_per_deg_lng, lat0 + dy / km_per_deg_lat])
+        popups.append(
+            f"<b>采样点 #{i}</b><br>RSSI: {rng.randint(-95, -60)} dBm")
+
+    samples = {
+        "type": "Feature",
+        "geometry": {"type": "MultiPoint", "coordinates": coords},
+        "properties": {
+            "layerPath": ["background", "采样点"],
+            "element": "background_nodes",
+            "popups": popups,
+        },
+    }
+
+    # ---- Form 2: 50 base stations, one Point feature each ----
+    stations = []
+    for i in range(50):
+        dx = rng.uniform(-1.9, 1.9)
+        dy = rng.uniform(-1.9, 1.9)
+        stations.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [lng0 + dx / km_per_deg_lng,
+                                lat0 + dy / km_per_deg_lat],
+            },
+            "properties": {
+                "layerPath": ["background", "基站"],
+                "element": "background_nodes",
+                "popup": f"<b>基站 #{i}</b><br>在线设备: {rng.randint(1, 30)}",
+                "style": {"fillColor": "#e67e22", "radius": 5},
+            },
+        })
+
+    return [samples] + stations
 
 
 def haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

@@ -266,6 +266,10 @@
 
   // ===== Settings (persisted in localStorage) =====
   var SETTINGS_KEY = 'tr-demo-settings';
+  // Bumped when the default basemap changes: settings saved by an older
+  // version re-default the source once (API keys and the per-source style
+  // memory are kept). v2 → default basemap is 高德 (AMap).
+  var SETTINGS_VERSION = 2;
   var settings = loadSettings();
   var baseLayers = {};        // styleId → L.Layer, for the active source
   var replay = null;
@@ -273,8 +277,10 @@
   function loadSettings() {
     var s = {};
     try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { s = {}; }
+    var keepSource = s.v === SETTINGS_VERSION && BASEMAP_SOURCES[s.sourceId];
     return {
-      sourceId: BASEMAP_SOURCES[s.sourceId] ? s.sourceId : 'osm',
+      v: SETTINGS_VERSION,
+      sourceId: keepSource ? s.sourceId : 'amap',        // default basemap: 高德
       styles: s.styles || {},                            // sourceId → remembered styleId
       dataDatum: s.dataDatum === 'gcj02' ? 'gcj02' : 'wgs84',
       keys: s.keys || {},                                // sourceId → API key
@@ -419,6 +425,7 @@
         points: '节点',
         static: '静态',
         events: '事件',
+        background_nodes: '背景节点',
         traveled: '已行进',
         untraveled: '未行进',
         indicator: '箭头',
@@ -430,6 +437,10 @@
       // checking a cell batch-opens those existing popups
       showInfoLabels: true,
       infoLabelsTitle: '批量标签',
+      // Cluster / scatter settings panel — its background-nodes section
+      // switches that element between clustered and raw scatter rendering
+      clusterScatterTitle: '聚合散点设置',
+      clusterScatterLabels: { cluster: '聚合', scatter: '散点' },
     });
 
     // ===== Log events =====

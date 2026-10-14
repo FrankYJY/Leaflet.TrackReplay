@@ -110,8 +110,44 @@
   width: 100%;
   margin: 0;
   cursor: pointer;
-  accent-color: #3388ff;
   height: 6px;
+  /* The global `-webkit-appearance: none` reset (bottom of this file) kills
+     the native range rendering, so unlike a plain accent-color slider the
+     rail must be drawn explicitly — otherwise the track is simply invisible
+     and only the thumb shows. */
+  -webkit-appearance: none;
+  appearance: none;
+  background: #ddd;
+  border-radius: 3px;
+  outline: none;
+}
+
+.tr-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3388ff;
+  border: 2px solid #fff;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.tr-slider::-moz-range-track {
+  height: 6px;
+  background: #ddd;
+  border-radius: 3px;
+}
+
+.tr-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3388ff;
+  border: 2px solid #fff;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
 }
 
 /* ---- View Follow Control ---- */
@@ -333,6 +369,52 @@
   color: #ddd;
 }
 
+/* ---- Cluster / scatter settings control ----
+   Styled after the element-toggles control: white box, title with a
+   separator, one section per element type inside. */
+.leaflet-trackreplay-clusterscatter {
+  background: #fff;
+  padding: 8px 10px;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  max-width: 220px;
+}
+
+.leaflet-trackreplay-clusterscatter .tr-cs-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 3px;
+}
+
+.leaflet-trackreplay-clusterscatter .tr-cs-section-title {
+  color: #888;
+  font-size: 11px;
+  margin: 4px 0 2px;
+}
+
+.leaflet-trackreplay-clusterscatter .tr-cs-option {
+  display: block;
+  padding: 2px 0;
+  color: #555;
+  cursor: pointer;
+}
+
+.leaflet-trackreplay-clusterscatter .tr-cs-option:hover {
+  color: #222;
+}
+
+.leaflet-trackreplay-clusterscatter .tr-cs-option input[type="radio"] {
+  margin-right: 4px;
+}
+
+.leaflet-trackreplay-clusterscatter .tr-cs-option.tr-cs-disabled {
+  color: #bbb;
+  cursor: default;
+}
+
 /* ---- Moving Indicator ---- */
 .leaflet-trackreplay-indicator,
 .leaflet-trackreplay-indicator.leaflet-interactive {
@@ -373,6 +455,7 @@
 .leaflet-container.dark .leaflet-trackreplay-timeline,
 .leaflet-container.dark .leaflet-trackreplay-controlbar,
 .leaflet-container.dark .leaflet-trackreplay-viewfollow,
+.leaflet-container.dark .leaflet-trackreplay-clusterscatter,
 .leaflet-container.dark .leaflet-trackreplay-legend {
   background: #2a2a2a;
   color: #ddd;
@@ -396,6 +479,14 @@
 
 .leaflet-container.dark .tr-time-display {
   color: #ddd;
+}
+
+.leaflet-container.dark .tr-slider {
+  background: #555;
+}
+
+.leaflet-container.dark .tr-slider::-moz-range-track {
+  background: #555;
 }
 
 .leaflet-container.dark .tr-time-label:hover {
