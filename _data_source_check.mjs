@@ -139,15 +139,30 @@ phase = 'B url + samples';
 await page.locator(PANEL + ' .tr-ds-url').fill(urlJson);
 await page.locator(PANEL + ' .tr-ds-row').nth(2).locator('.tr-ds-btn').click();
 await page.waitForTimeout(900);
-await page.locator(PANEL + ' .tr-ds-sample').first().click();
+await page.locator(PANEL + ' .tr-ds-sample').first().click(); // 示例轨迹 #1
 await page.waitForTimeout(700);
-await page.locator(PANEL + ' .tr-ds-sample').nth(1).click();
+await page.locator(PANEL + ' .tr-ds-sample').first().click(); // 示例轨迹 #2 (random spot)
+await page.waitForTimeout(700);
+await page.locator(PANEL + ' .tr-ds-sample').nth(1).click();  // 示例采样点 #1
 await page.waitForTimeout(700);
 out.samples = await page.evaluate(() => ({
   track: !!replay.allLayers['导入/示例轨迹'],
   bg: !!replay.allLayers['导入/示例采样点'],
   datasets: replay.listDatasets().length,
 }));
+out.sampleRepeat = await page.evaluate(() => {
+  var a = replay.allLayers['导入/示例轨迹'];
+  var b = replay.allLayers['导入/示例轨迹 #2'];
+  var names = replay.listDatasets().map(function (d) { return d.name; });
+  var ca = a && a.timestampFeatures[0] ? a.timestampFeatures[0]._trackMeta.coords[0] : null;
+  var cb = b && b.timestampFeatures[0] ? b.timestampFeatures[0]._trackMeta.coords[0] : null;
+  return {
+    numberedNameInList: names.indexOf('示例轨迹 #2') >= 0,
+    secondObjectExists: !!b,
+    distinctSpots: !!(ca && cb) &&
+      (Math.abs(ca[0] - cb[0]) + Math.abs(ca[1] - cb[1]) > 0.004),
+  };
+});
 
 // ---- C. management: live refresh, per-row remove, two-click clear ----
 phase = 'C console add refreshes list';
@@ -198,7 +213,9 @@ await page.waitForTimeout(800);
 out.reimport = await page.evaluate(() => ({
   datasets: replay.listDatasets().length,
   rowCount: document.querySelectorAll('.leaflet-trackreplay-datasource .tr-ds-dataset-row').length,
-  objectBack: !!replay.allLayers['导入/示例轨迹'],
+  objectBack: Object.keys(replay.allLayers).some(function (k) {
+    return k.indexOf('导入/示例轨迹') === 0;
+  }),
 }));
 
 // ---- D. panel survived all rebuilds ----

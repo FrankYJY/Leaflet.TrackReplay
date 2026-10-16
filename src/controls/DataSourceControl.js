@@ -241,14 +241,21 @@ export function createDataSourceControl(options) {
                 self._ingestText(data, sample.label);
                 return;
               }
+              // A sample may return `{ featureCollection, name }` to control
+              // the dataset name it is added under (e.g. numbered repeats).
+              var name = sample.label;
+              if (data && data.featureCollection) {
+                name = data.name || name;
+                data = data.featureCollection;
+              }
               var fc;
               try {
-                fc = normalizeGeoJSON(data, sample.label, layerPathFor);
+                fc = normalizeGeoJSON(data, name, layerPathFor);
               } catch (err) {
-                self._report('err', messages.error(err, sample.label));
+                self._report('err', messages.error(err, name));
                 return;
               }
-              self._deliver(fc, { name: sample.label });
+              self._deliver(fc, { name: name });
             };
           })(options.samples[si]);
         }

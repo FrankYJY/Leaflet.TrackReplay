@@ -136,16 +136,19 @@ def generate_sample_data() -> dict:
         mark_speeds.append(round(speed, 2))
 
     # --- Track 3: Simple static GeoJSON polygon (no timestamp) ---
+    # Placed at the western edge of the demo area: it stays visible at the
+    # default viewport but no longer tints/covers the tracks and background
+    # nodes in the middle, which it used to do as a centred 6x6 km square.
     static_polygon = {
         "type": "Feature",
         "geometry": {
             "type": "Polygon",
             "coordinates": [[
-                [116.38, 39.88],
-                [116.44, 39.88],
-                [116.44, 39.94],
-                [116.38, 39.94],
-                [116.38, 39.88],
+                [116.345, 39.905],
+                [116.375, 39.905],
+                [116.375, 39.925],
+                [116.345, 39.925],
+                [116.345, 39.905],
             ]],
         },
         "properties": {

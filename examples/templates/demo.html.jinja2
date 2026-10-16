@@ -504,37 +504,58 @@
         loop: '循环播放',
         hint: '点击后键盘可用：Space 播放/暂停 · ←/→ 快退/快进 5 秒 · 0-9 速度档位 · R 停止',
       },
+      // Samples land at a RANDOM spot 1.6-3.2 km from the demo centre, so
+      // repeated clicks spread out instead of stacking on the playback area;
+      // every click after the first gets its own numbered dataset name and
+      // layerPath (no silent merging into the previous sample).
       dataSourceSamples: [
         { label: '示例轨迹', data: function () {
+            window.__sampleSeq = window.__sampleSeq || {};
+            var n = (window.__sampleSeq.traj = (window.__sampleSeq.traj || 0) + 1);
+            var name = n === 1 ? '示例轨迹' : '示例轨迹 #' + n;
+            var ang = Math.random() * Math.PI * 2;
+            var dist = 1.6 + Math.random() * 1.6;             // km
+            var clat = 39.90 + dist * Math.sin(ang) / 111;
+            var clng = 116.40 + dist * Math.cos(ang) / 85.2;  // km per deg lng @39.9°
             var t0 = Date.now(), coords = [], times = [];
             for (var i = 0; i < 40; i++) {
               var r = 0.004 * (1 + i / 30);
-              coords.push([116.40 + r * Math.cos(i / 6), 39.90 + 0.75 * r * Math.sin(i / 6)]);
+              coords.push([clng + r * Math.cos(i / 6), clat + 0.75 * r * Math.sin(i / 6)]);
               times.push(t0 + i * 5000);
             }
-            return { type: 'FeatureCollection', features: [{
+            return { name: name, featureCollection: { type: 'FeatureCollection', features: [{
               type: 'Feature',
               geometry: { type: 'LineString', coordinates: coords },
               properties: {
-                layerPath: ['导入', '示例轨迹'], isTimestampedgeojson: true,
+                layerPath: ['导入', name], isTimestampedgeojson: true,
                 times: times, drawMovingIndicator: true,
               },
-            }] };
+            }] } };
         } },
         { label: '示例采样点', data: function () {
+            window.__sampleSeq = window.__sampleSeq || {};
+            var n = (window.__sampleSeq.pts = (window.__sampleSeq.pts || 0) + 1);
+            var name = n === 1 ? '示例采样点' : '示例采样点 #' + n;
+            var ang = Math.random() * Math.PI * 2;
+            var dist = 1.6 + Math.random() * 1.6;
+            var clat = 39.90 + dist * Math.sin(ang) / 111;
+            var clng = 116.40 + dist * Math.cos(ang) / 85.2;
             var coords = [], popups = [];
             for (var i = 0; i < 30; i++) {
-              coords.push([116.39 + Math.random() * 0.04, 39.88 + Math.random() * 0.04]);
-              popups.push('示例采样点 #' + i);
+              coords.push([
+                clng + (Math.random() - 0.5) * 0.006,
+                clat + (Math.random() - 0.5) * 0.006,
+              ]);
+              popups.push(name + ' #' + i);
             }
-            return { type: 'FeatureCollection', features: [{
+            return { name: name, featureCollection: { type: 'FeatureCollection', features: [{
               type: 'Feature',
               geometry: { type: 'MultiPoint', coordinates: coords },
               properties: {
-                layerPath: ['导入', '示例采样点'], element: 'background_nodes',
+                layerPath: ['导入', name], element: 'background_nodes',
                 popups: popups,
               },
-            }] };
+            }] } };
         } },
       ],
     });
