@@ -96,7 +96,6 @@ var data = {
 // 3. Initialize TrackReplay
 var replay = L.trackReplay(map, data, {
   colorMode: 'fixed',
-  speed: 1,
   loop: false,
 });
 
@@ -117,7 +116,7 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `colorMode` | `'fixed' \| 'adaptive' \| 'custom'` | `'fixed'` | Speed-to-color mapping mode |
 | `colorConfig` | `ColorBarConfig` | — | Custom colorbar config (required for `'custom'` mode) |
 | `colorRange` | `number[]` | `[0, 200]` | `[min, max]` km/h the ramp spans in `'fixed'` mode |
-| `speed` | `number` | `1` | Initial playback speed multiplier |
+| `speed` | `number` | `60` | Initial playback speed multiplier — 60× is the `1s = 1min` rung of the default ladder |
 | `speedOptions` | `number[]` | `[0.25, 0.5, 1, 2, 4, 8, 60, 600, 3600]` | Speed ladder shown in the selector |
 | `speedLabel` | `(speed) => string` | — | Custom label formatter for the ladder |
 | `playbackLabels` | `object` | English defaults | Playback tooltips `{stop, play, pause, speed, loop, hint}`; the key names (Space / R / 0-9) are appended automatically |
@@ -147,9 +146,11 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `dataSourcePosition` | `string` | `'topleft'` | Corner of that panel |
 | `dataSourceTitle` | `string` | `'Data source'` | Title of that panel (shows the dataset count) |
 | `dataSourceExpanded` | `boolean` | `false` | Start with the panel open |
-| `dataSourceLabels` | `object` | English defaults | Panel UI strings (`pick/add/load/pastePlaceholder/urlPlaceholder/samplesLabel/dropHint/pastedName/datasetsLabel/importLabel/removeLabel/clearLabel/clearConfirmLabel/emptyLabel`) |
-| `dataSourceMessages` | `object` | English defaults | Text builders `{added, degraded, empty, error, rowMeta}` |
+| `dataSourceLabels` | `object` | English defaults | Panel UI strings (`pick/add/load/pastePlaceholder/urlPlaceholder/samplesLabel/dropHint/pastedName/datasetsLabel/importLabel/removeLabel/clearLabel/clearConfirmLabel/emptyLabel/previewHint/previewCopy/previewCopied/previewCopyFailed/previewDownload/previewClose/formatHelp/formatCopy/formatCopyPython/formatPythonNote/formatFill`) |
+| `dataSourceMessages` | `object` | English defaults | Text builders `{added, degraded, empty, error, rowMeta, previewSummary, previewTruncated, previewPositionsTruncated, previewCharsTruncated, previewTooLarge, previewMissing, importTooLarge, formatHelp, formatShapes}` — `formatHelp()` returns the general rules (one per line), `formatShapes()` returns `[{name, rules, example, python}]` (one column per input shape) |
 | `dataSourceSamples` | `Object[]` | — | `[{label, data}]` sample datasets shown as buttons |
+| `dataSourcePreview` | `object` | `{maxFeatures:50, maxChars:20000, summaryScan:5000, downloadMaxChars:2e7, downloadMaxMs:3000}` | Limits for the dataset preview and its export — nothing is ever stringified whole, and the export aborts (with a report line) instead of freezing the tab; `0`/`Infinity` disables a limit |
+| `dataSourceImportMaxChars` | `number` | `5e7` | Refuse to parse an imported text above this many characters (same freeze guard) |
 | `showSearch` | `boolean` | `false` | Show the multi-search control (leaflet-multisearch) |
 | `searchPosition` | `string` | `'topleft'` | Corner of the search control |
 | `searchElements` | `string[]` | `['background_nodes']` | Element types included in the search index |
@@ -157,6 +158,11 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `searchLabels` | `object` | English defaults | `{open, close, placeholder, prev, next, inputHint, keyboardHint}` |
 | `searchMessages` | `object` | English defaults | `{count, of, more, empty}` text builders |
 | `mapFocusSpace` | `boolean` | `true` | While the **map itself** is focused, Space toggles play/pause (nothing else is bound to the map) |
+| `displayTimeZone` | `*` | `'local'` | The zone the timeline is read in: `'local'` (browser), a fixed UTC offset in hours (e.g. `8`), or an IANA name (e.g. `'Asia/Shanghai'`). Moves the time label, the time editor, the day boundaries and the calendar lookups together |
+| `showDateInfo` | `boolean` | `true` | The date line under the timeline (see below) |
+| `dateInfoLabels` | `object` | English defaults | `{ weekdays: [7 strings, Sunday first], holidaysField, workdaysField }` — the last two prefix entries coming from `calendar.holidays` / `calendar.workdays` (default: the field names themselves) |
+| `dateInfoMessages` | `object` | English defaults | `{ dayOf(n, total) }` |
+| `calendar` | `object` | — | Holiday table: `{ holidays: {'YYYY-MM-DD': label}, workdays: {'YYYY-MM-DD': label} }`, dated in the display zone; a date in both means `workdays` wins. Fetched by the host — see "Date line, time zone & holidays" |
 | `showElementToggles` | `boolean` | `true` | Show the batch control (one tri-state checkbox per element type, across all objects) |
 | `elementTogglesPosition` | `string` | `'topright'` | Corner for the batch control |
 | `elementTogglesTitle` | `string` | `'Batch'` | Title of the batch control (doubles as its fold header) |
@@ -236,6 +242,10 @@ at once**, independent of the layer tree's per-object checkboxes:
 | `clearDatasets()` | Remove all datasets (the session stays alive) |
 | `listDatasets()` | Metadata of the current datasets |
 | `getDataset(id)` | One dataset's raw FeatureCollection |
+| `setTimeZone(tz)` | Switch the timeline's display zone (no rebuild) |
+| `getTimeZone()` | The current zone spec |
+| `setCalendar(table)` | Replace the holiday table (no rebuild) — call it whenever the host's fetched data changes |
+| `getCalendar()` | The current holiday table |
 | `on(event, fn)` | Register event listener |
 | `off(event, fn)` | Remove event listener |
 | `destroy()` | Remove all layers, controls, and listeners |
@@ -303,6 +313,20 @@ with three parts:
    arms the button, the second confirms). The list refreshes from the
    session's dataset events, so programmatic `addDataset()` /
    `removeDataset()` calls update it too. The title shows the count.
+   **Clicking a row opens a preview** of that dataset's raw GeoJSON — a modal
+   panel (Esc / backdrop / ✕ to close; the map behind is inert while it is
+   open) with a one-line summary (features · geometry types · property keys ·
+   time range) above the pretty-printed text. The text is **explicitly
+   truncated** (default: first 50 features and at most 20 000 characters —
+   `dataSourcePreview`) and ends with a comment line saying what was cut, so a
+   copied snippet can never be mistaken for the complete dataset. The footer
+   offers **Copy** (exactly what is shown — the bounded part) and **Download
+   .geojson** (the complete dataset, serialized feature-by-feature under a
+   character + time budget: an oversized export aborts with a report line
+   instead of freezing the tab). Removing or clearing the dataset closes its
+   preview. The same guard applies at import: a text above
+   `dataSourceImportMaxChars` (default 5e7 characters) is refused with a
+   report line rather than parsed.
 2. **Import** — five channels:
 
 | Channel | Notes |
@@ -315,6 +339,21 @@ with three parts:
 
 3. **Report** — one line per import attempt (added / degraded / empty /
    error); the texts come from `dataSourceMessages`, so they can be localized.
+
+- Under the paste box, **Format & example** opens a modal: the general rules
+  on top (one line each, from `dataSourceMessages.formatHelp()`), then **one
+  column per input shape** — timestamped track, event marker, background
+  nodes, static context, and a mixed collection (`formatShapes()`). Each
+  column carries only its own rules, its own runnable JSON example, and — as a
+  separate block — **self-contained Python** that turns a raw sequence into
+  that JSON, captioned with a one-line why (`formatPythonNote`: run it
+  yourself — what it prints is the GeoJSON to paste in, change the data and
+  you are done). It imports nothing from this project, so it can be copied
+  out and used unchanged.
+  The buttons are **Copy JSON**, **Copy Python** and **Fill the paste box**;
+  filling only puts the JSON there (editable, focused) and never imports by
+  itself. [`examples/convert.py`](#producing-the-data-from-python-examplesconvertpy)
+  is the same logic packaged as a ready-made module.
 
 - GeoJSON may be a `FeatureCollection`, a single `Feature`, or an array of
   either. Features **without** a `layerPath` get `['imported', <name>]` so
@@ -405,7 +444,13 @@ Extends standard GeoJSON features with additional properties:
 }
 ```
 
+Producing all of this from your own data in Python: see
+[`examples/convert.py`](#producing-the-data-from-python-examplesconvertpy).
+
 ### Playback speed
+
+The default is **60×** (`1s = 1min`) — tracks usually span hours, where 1× is
+unwatchable. `speed: 1` (or any ladder value) overrides it.
 
 The selector offers a ladder of speeds. Below 60× entries read as plain multipliers (`0.25×` …
 `8×`); at 60× and above they switch to **time compression**, which is the natural notation for
@@ -558,6 +603,43 @@ clicking each one:
   data — safe for hundreds of tracks as long as few rows are switched on. At low zoom, expect
   overlap — that's inherent to showing many popups at once; zoom in or enable fewer rows.
 
+### Date line, time zone & holidays
+
+Under the timeline there is a date line, one screenshot-height of text that
+answers "when am I, really?":
+
+```
+00:00:00 ————————————————●———————      ← unchanged: time label + slider
+周四 · 第 1/3 天 · holidays · National Day,国庆节,3 · Asia/Shanghai
+                   └── 节日 · 假期名 ──┘
+```
+
+- **Time zone** — `displayTimeZone` decides how the whole timeline reads: the
+  time label, the double-click editor's parsing, the midnight ticks on the
+  slider, and which calendar day the holiday lookup uses. `'local'` (the
+  browser's zone) is the default; a number is a fixed offset (`8` = UTC+8); an
+  IANA name (`'Asia/Shanghai'`) gets DST from the platform's tz database.
+  `replay.setTimeZone(tz)` switches it live, without rebuilding.
+- **Day index** — `第 N/M 天` appears only when the data spans more than one
+  calendar day, and each midnight gets a hairline tick on the slider (thinned
+  out when they would crowd).
+- **Holidays** — the plugin ships *no* holiday data (it changes every year and
+  differs per country). The host fetches it, hands it over as
+  `calendar: { holidays, workdays }` (dates keyed `YYYY-MM-DD` **in the display
+  zone**) and calls `replay.setCalendar()` whenever it updates; the line shows
+  the field it came from as a prefix, so a make-up workday can't be mistaken
+  for a day off.
+- **Where to get the data** — for China (with 调休/补班), the yearly JSON of
+  [chinese-days](https://www.npmjs.com/package/chinese-days)
+  (`https://cdn.jsdelivr.net/npm/chinese-days/dist/years/<year>.json`) already
+  has exactly this two-bucket shape — no conversion. It is CORS-enabled
+  (`access-control-allow-origin: *`) and cacheable for a week, so a host can
+  fetch it per year and keep it in `localStorage`; future years 404 until the
+  State Council publishes them.
+  [holiday-cn](https://github.com/NateScarlet/holiday-cn) is the equivalent
+  flat-list source (`{name, date, isOffDay}`) if you need the official
+  document links.
+
 ### Speed → colour mapping
 
 `colorMode` decides how a segment's speed becomes a colour. `fixed` and `adaptive` share the same
@@ -699,6 +781,32 @@ python server.py
 The demo page loads Leaflet and its helper plugins from `examples/vendor/`
 (committed with the repo) — **no external CDN is needed**; only basemap tiles
 require network access.
+
+### Producing the data from Python (`examples/convert.py`)
+
+For **your own** data there is a standard-library-only converter next to the
+demo server:
+
+```python
+from convert import track, event, background_nodes, area, write_geojson
+
+write_geojson({
+    "type": "FeatureCollection",
+    "features": [
+        track([(t, lng, lat), ...], layer_path=["visitor", "Bee"], name="Bee"),
+        event([116.410, 39.905], layer_path=["visitor", "Bee"], popup="掉头"),
+    ],
+}, "demo.geojson")
+```
+
+`track()` takes a sequence of `(time, lng, lat)` samples — `time` may be a
+`datetime`, seconds or milliseconds — and fills in everything the format asks
+for: `times` in ms, per-segment `speeds` (haversine ÷ time difference),
+per-segment `popups` ("time → time / speed / distance"), optional
+`pointPopups` with cumulative distance, and `drawMovingIndicator`. The other
+three helpers cover the remaining shapes in a couple of lines each. Running
+`python convert.py out.geojson` writes a small mixed sample you can drop onto
+the demo map.
 
 ## Project Structure
 

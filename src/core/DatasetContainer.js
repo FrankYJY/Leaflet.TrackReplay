@@ -28,23 +28,21 @@ export function createDatasetContainer() {
 
   var container = {
     /**
-     * Add one GeoJSON FeatureCollection as a new dataset.
+     * Add one dataset — the same shapes the import panel accepts: a
+     * FeatureCollection, a single Feature, or an array of either (a bare array
+     * is what the Python snippets print).
      *
-     * @param {Object} featureCollection
+     * @param {Object|Object[]} data
      * @param {Object} [opts]
      * @param {string} [opts.name] - display name (default "Dataset N")
      * @returns {{id: number, name: string, featureCount: number}}
      */
-    add: function (featureCollection, opts) {
+    add: function (data, opts) {
       opts = opts || {};
-      if (!featureCollection || featureCollection.type !== 'FeatureCollection' ||
-          !Array.isArray(featureCollection.features)) {
-        throw new Error('DatasetContainer: expected a GeoJSON FeatureCollection');
-      }
       var record = {
         id: ++seq,
         name: opts.name || ('Dataset ' + seq),
-        features: featureCollection.features,
+        features: toFeatures(data),
       };
       datasets.push(record);
       return { id: record.id, name: record.name, featureCount: record.features.length };
@@ -134,4 +132,33 @@ export function createDatasetContainer() {
   };
 
   return container;
+}
+
+/**
+ * Normalize what a caller may hand us into a features array: a
+ * FeatureCollection, a single Feature, or an array mixing either.
+ * @returns {Object[]} features (by reference — never copied)
+ */
+function toFeatures(data) {
+  if (data && data.type === 'FeatureCollection') {
+    if (!Array.isArray(data.features)) {
+      throw new Error('DatasetContainer: FeatureCollection without a features array');
+    }
+    return data.features;
+  }
+  if (data && data.type === 'Feature') { return [data]; }
+  if (Array.isArray(data)) {
+    var out = [];
+    for (var i = 0; i < data.length; i++) {
+      var item = data[i];
+      if (item && item.type === 'FeatureCollection' && Array.isArray(item.features)) {
+        out = out.concat(item.features);
+      } else if (item && item.type === 'Feature') {
+        out.push(item);
+      }
+    }
+    if (out.length || data.length === 0) { return out; }
+  }
+  throw new Error('DatasetContainer: expected GeoJSON ' +
+    '(FeatureCollection, a Feature, or an array of either)');
 }

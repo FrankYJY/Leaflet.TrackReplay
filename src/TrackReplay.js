@@ -16,6 +16,7 @@ import { createTimeEngine } from './core/TimeEngine.js';
 import { createLayerControl } from './core/LayerTreeBuilder.js';
 import { createDatasetContainer } from './core/DatasetContainer.js';
 import { createSearchIndex } from './core/SearchIndex.js';
+import { buildDatasetPreview, serializeDatasetChunks } from './core/DatasetPreview.js';
 
 import { createTrackLayer } from './layers/TrackLayer.js';
 import { createPointClusterLayer } from './layers/PointClusterLayer.js';
@@ -32,11 +33,12 @@ import { createColorLegend } from './controls/ColorLegend.js';
 import { createElementToggles } from './controls/ElementToggles.js';
 import { createInfoLabels } from './controls/InfoLabels.js';
 import { createClusterScatterControl } from './controls/ClusterScatterControl.js';
-import { createDataSourceControl } from './controls/DataSourceControl.js';
+import { createDataSourceControl, prettyExample } from './controls/DataSourceControl.js';
 import { createSearchControl, plainText } from './controls/SearchControl.js';
 
 import { wgs84ToGcj02, gcj02ToWgs84, outOfChina } from './utils/GCJ02.js';
 import { parseGPX } from './utils/GPX.js';
+import { createZone } from './utils/TimeZone.js';
 import { createEventBus } from './utils/EventBus.js';
 
 /** Playback events re-emitted on the session bus (forwarded per build). */
@@ -98,7 +100,9 @@ function collectSearchRecords(allLayers, elementKeys) {
  * @param {Object} [options.colorConfig]            - custom colorbar config (for 'custom' mode)
  * @param {number[]} [options.colorRange]           - [min, max] km/h for 'fixed' mode
  *        (default [0, 200]); the Turbo-style ramp is spread over this range
- * @param {number} [options.speed=1]                - initial playback speed
+ * @param {number} [options.speed=60]               - initial playback speed
+ *        (60× is the "1s = 1min" rung of the default ladder: a natural default
+ *        for tracks that span hours, where 1× is unwatchable)
  * @param {number[]} [options.speedOptions]         - speed ladder, defaults to
  *        [0.25, 0.5, 1, 2, 4, 8, 60, 600, 3600] (≥60× is labelled as time
  *        compression, e.g. "1s = 1min")
@@ -173,8 +177,20 @@ function collectSearchRecords(allLayers, elementKeys) {
  * @param {boolean} [options.dataSourceExpanded=false] - start with the panel open
  * @param {Object} [options.dataSourceLabels]   - panel UI strings
  * @param {Object} [options.dataSourceMessages] - text builders
- *        ({ added, degraded, empty, error, rowMeta })
+ *        ({ added, degraded, empty, error, rowMeta, previewSummary,
+ *        previewTruncated, previewPositionsTruncated, previewCharsTruncated,
+ *        previewTooLarge, previewMissing, importTooLarge, formatHelp,
+ *        formatShapes }) — formatHelp() returns the general rules (one per
+ *        line), formatShapes() the per-shape columns:
+ *        [{name, rules, example, python}]
  * @param {Object} [options.dataSourceSamples] - [{ label, data }] samples
+ * @param {Object} [options.dataSourcePreview] - preview/export limits
+ *        ({ maxFeatures=50, maxChars=20000, summaryScan=5000,
+ *        downloadMaxChars=2e7, downloadMaxMs=3000 }; 0/Infinity disables a
+ *        limit) — click a dataset row to preview it; the caps are what keeps
+ *        a huge dataset from freezing the tab
+ * @param {number} [options.dataSourceImportMaxChars=5e7] - refuse to parse an
+ *        imported text above this many characters (same freeze guard)
  * @param {boolean} [options.showSearch=false] - (session-level) show the
  *        multi-search control (leaflet-multisearch): searches the label texts
  *        of `searchElements` — every occurrence is a hit, duplicates
@@ -188,6 +204,24 @@ function collectSearchRecords(allLayers, elementKeys) {
  * @param {Object} [options.searchLabels]   - UI strings ({ open, placeholder,
  *        prev, next })
  * @param {Object} [options.searchMessages] - texts ({ count, of, more, empty })
+ * @param {*} [options.displayTimeZone='local'] - the zone the timeline is read
+ *        in: 'local' (browser), a fixed UTC offset in hours (e.g. 8), or an
+ *        IANA name (e.g. 'Asia/Shanghai'). Affects the time label, the time
+ *        editor, the day boundaries and the calendar lookup keys — the whole
+ *        timeline shifts together
+ * @param {boolean} [options.showDateInfo=true] - the date line under the
+ *        timeline: weekday · day N/M (when the data spans days) · the day's
+ *        calendar entry · the zone label
+ * @param {Object} [options.dateInfoLabels] - { weekdays: [7 strings, Sunday
+ *        first], holidaysField, workdaysField } — the last two are the prefixes
+ *        shown for entries coming from calendar.holidays / calendar.workdays
+ *        (default: the field names themselves)
+ * @param {Object} [options.dateInfoMessages] - { dayOf(n, total) }
+ * @param {Object} [options.calendar] - the holiday table:
+ *        { holidays: {'YYYY-MM-DD': label}, workdays: {'YYYY-MM-DD': label} },
+ *        dates keyed in the display zone; a date in both means workdays wins.
+ *        Not shipped with the plugin (it changes every year) — the host fetches
+ *        it and calls `replay.setCalendar(...)` whenever it updates
  * @param {boolean} [options.mapFocusSpace=true] - while the MAP itself has
  *        focus (clicking it focuses its container), Space toggles
  *        play/pause. Nothing else is bound to the map, so its native
@@ -196,8 +230,9 @@ function collectSearchRecords(allLayers, elementKeys) {
  *        Set false to leave the map's keyboard completely untouched.
  * @returns {Object} internal handle
  */
-function buildReplay(map, featureCollection, options, initialCluster) {
+function buildReplay(map, featureCollection, options, initialCluster, shared) {
   options = options || {};
+  shared = shared || {};
 
   // Background-nodes rendering mode, resolved BEFORE the layers are built: a
   // mode carried over from the previous build (dataset rebuild) wins over the
@@ -234,7 +269,7 @@ function buildReplay(map, featureCollection, options, initialCluster) {
 
   // ---- 3. Time Engine ----
   var timeEngine = createTimeEngine({
-    speed: options.speed || 1,
+    speed: options.speed || 60,
     loop: options.loop || false,
     tickLen: options.tickLen || 250,
     minTickMs: options.minTickMs,
@@ -303,8 +338,9 @@ function buildReplay(map, featureCollection, options, initialCluster) {
     // Group non-timestamped features into element layers.
     // `properties.element` names the group (e.g. "events"); features without
     // it land in the generic "static" element. The name "background_nodes" is
-    // reserved: that bucket renders as a low-pane cluster point layer (see
-    // BackgroundNodesLayer) instead of the plain GeoJSON path.
+    // reserved: that bucket renders through BackgroundNodesLayer instead of the
+    // plain GeoJSON path — clickable dots on the shared vector renderer, sent
+    // to the back of the draw order (and optionally clustered).
     var staticBuckets = {};
     var bucketOrder = [];
 
@@ -346,7 +382,9 @@ function buildReplay(map, featureCollection, options, initialCluster) {
       // Only the generic "static" bucket is context (zones, areas) and goes to
       // the back; named buckets like "events" are annotations drawn on top so
       // their rings stay visible and clickable over the tracks.
-      // (background_nodes manages its own z-order through its pane.)
+      // (background_nodes sinks itself with a per-dot bringToBack on the shared
+      // renderer — not a low pane, which would paint below but never receive
+      // clicks, since the tracks' canvas covers it.)
       if (bucket === 'static') {
         staticLayers.push(staticLayer);
       }
@@ -674,15 +712,25 @@ function buildReplay(map, featureCollection, options, initialCluster) {
   var showControls = options.showControls !== false;
   var showTimeline = options.showTimeline !== false;
 
+  // Time zone + holiday table + date-line text — owned by the session (they
+  // survive rebuilds and can change at runtime) and handed to the timeline.
+  var dateInfoOptions = {
+    timeZone: shared.timeZone,
+    calendar: shared.calendar,
+    showDateInfo: options.showDateInfo,
+    labels: options.dateInfoLabels,
+    messages: options.dateInfoMessages,
+  };
+
   if (showControls && showTimeline) {
     // Both in a single box (video-player style)
-    controlBar = createControlBar(timeEngine, {
+    controlBar = createControlBar(timeEngine, L.extend({
       position: options.controlBarPosition || 'bottomleft',
       speedOptions: options.speedOptions,
       speedLabel: options.speedLabel,
       showLoop: options.showLoop,
       labels: options.playbackLabels,
-    });
+    }, dateInfoOptions));
     map.addControl(controlBar);
   } else if (showControls) {
     controls = createPlaybackControls(timeEngine, {
@@ -693,7 +741,7 @@ function buildReplay(map, featureCollection, options, initialCluster) {
     });
     map.addControl(controls);
   } else if (showTimeline) {
-    timeline = createTimelineControl(timeEngine);
+    timeline = createTimelineControl(timeEngine, dateInfoOptions);
     map.addControl(timeline);
   }
 
@@ -842,6 +890,21 @@ export function trackReplay(map, dataOrArray, options) {
   var currentBuild = null;
   var mapKeyHandler = null;
 
+  // Session-level timeline state: it outlives every rebuild, and the host can
+  // change both at runtime (the holiday table arrives asynchronously).
+  var timeZone = options.displayTimeZone;
+  var calendar = options.calendar || null;
+
+  /** The timeline API of the current build (it lives inside the bar). */
+  function currentTimelineApi() {
+    var build = currentBuild;
+    if (!build) { return null; }
+    var control = build.controlBar || build.timeline;
+    if (!control || typeof control.getContainer !== 'function') { return null; }
+    var el = control.getContainer();
+    return el ? (el._trTimelineApi || null) : null;
+  }
+
   /** Re-point the instance's live build fields at the current build. */
   function syncFields() {
     var b = currentBuild;
@@ -982,7 +1045,7 @@ export function trackReplay(map, dataOrArray, options) {
     if (container.isEmpty()) { return; }
 
     currentBuild = buildReplay(map, container.mergedFeatureCollection(), options,
-      snap ? snap.cluster : undefined);
+      snap ? snap.cluster : undefined, { timeZone: timeZone, calendar: calendar });
     currentBuild._onLayerControlChange = function (lc) { instance.layerControl = lc; };
     currentBuild._onLayerRebuild = function () {
       if (instance.searchControl) { instance.searchControl.refresh(); }
@@ -1061,6 +1124,36 @@ export function trackReplay(map, dataOrArray, options) {
 
     /** Get the color legend data */
     getLegend: function (steps) { return currentBuild ? currentBuild.colorMapper.getLegend(steps) : []; },
+
+    // ---- Display zone & holiday calendar (session-level, no rebuild) ----
+
+    /**
+     * Switch the display zone used by the timeline.
+     * @param {*} tz - 'local' | UTC offset in hours | IANA zone name
+     */
+    setTimeZone: function (tz) {
+      timeZone = tz;
+      var api = currentTimelineApi();
+      if (api) { api.setTimeZone(tz); }
+    },
+
+    /** @returns {*} the current display zone spec */
+    getTimeZone: function () { return timeZone; },
+
+    /**
+     * Replace the holiday table:
+     * `{ holidays: {'YYYY-MM-DD': label}, workdays: {'YYYY-MM-DD': label} }`.
+     * Call it whenever the host has fetched or refreshed the data — the date
+     * line updates in place, no rebuild.
+     */
+    setCalendar: function (table) {
+      calendar = table || null;
+      var api = currentTimelineApi();
+      if (api) { api.setCalendar(calendar); }
+    },
+
+    /** @returns {Object|null} the current holiday table */
+    getCalendar: function () { return calendar; },
 
     // ---- Datasets (每次 add = 一个数据集；删除即精确移除这一份) ----
 
@@ -1174,6 +1267,11 @@ export function trackReplay(map, dataOrArray, options) {
       listDatasets: function () { return container.list(); },
       removeDataset: function (id) { return instance.removeDataset(id); },
       clearDatasets: function () { return instance.clearDatasets(); },
+      // Raw features for the preview modal. Handed out by reference (the
+      // container's contract) — the preview only reads them.
+      getDataset: function (id) { return container.get(id); },
+      preview: options.dataSourcePreview,
+      importMaxChars: options.dataSourceImportMaxChars,
       onData: function (fc, meta) {
         instance.addDataset(fc, { name: meta && meta.name });
       },
@@ -1252,6 +1350,10 @@ if (typeof L !== 'undefined') {
     LayerTreeBuilder: { createLayerControl: createLayerControl },
     DatasetContainer: { createDatasetContainer: createDatasetContainer },
     SearchIndex: { createSearchIndex: createSearchIndex },
+    DatasetPreview: {
+      buildDatasetPreview: buildDatasetPreview,
+      serializeDatasetChunks: serializeDatasetChunks,
+    },
   };
 
   L.TrackReplay.Layers = {
@@ -1272,7 +1374,10 @@ if (typeof L !== 'undefined') {
     ElementToggles: { createElementToggles: createElementToggles },
     InfoLabels: { createInfoLabels: createInfoLabels },
     ClusterScatterControl: { createClusterScatterControl: createClusterScatterControl },
-    DataSourceControl: { createDataSourceControl: createDataSourceControl },
+    DataSourceControl: {
+      createDataSourceControl: createDataSourceControl,
+      prettyExample: prettyExample,
+    },
     SearchControl: { createSearchControl: createSearchControl, plainText: plainText },
   };
 
@@ -1284,6 +1389,9 @@ if (typeof L !== 'undefined') {
     },
     GPX: {
       parseGPX: parseGPX,
+    },
+    TimeZone: {
+      createZone: createZone,
     },
   };
 

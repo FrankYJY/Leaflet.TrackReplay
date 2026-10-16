@@ -104,6 +104,38 @@
 
 .tr-slider-container {
   width: 100%;
+  position: relative;
+}
+
+/* The date line under the slider: weekday · day N/M · calendar entry · zone.
+   Wraps — a raw calendar value can be long. */
+.tr-tl-dateinfo {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #666;
+  word-break: break-word;
+}
+
+/* Day boundaries: one hairline per midnight. Percentages live in a calc() that
+   matches the thumb's travel (THUMB_PX in TimelineControl.js must equal the
+   thumb width below), so they stay correct when the bar is resized. */
+.tr-dayticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.tr-daytick {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 14px;
+  margin-top: -7px;
+  background: rgba(51, 136, 255, 0.55);
 }
 
 .tr-slider {
@@ -499,6 +531,25 @@
   resize: vertical;
 }
 
+/* The paste box's format-help entry: a link, not another button — the modal
+   behind it carries the rules and the minimal example. */
+.leaflet-trackreplay-datasource .tr-ds-format-link {
+  color: #3388ff;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 1px 0 0 2px;
+  text-decoration: underline;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-format-link:hover {
+  color: #1a5fb4;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-format-link:focus {
+  outline: 2px solid #3388ff;
+  outline-offset: 1px;
+}
+
 .leaflet-trackreplay-datasource .tr-ds-samples {
   flex-wrap: wrap;
   align-items: center;
@@ -559,6 +610,22 @@
   padding: 2px 0;
 }
 
+/* Rows are clickable (open the dataset preview) only when the host wired
+   `getDataset`; the class is added at render time. */
+.leaflet-trackreplay-datasource .tr-ds-dataset-row.tr-ds-row-clickable {
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-dataset-row.tr-ds-row-clickable:hover {
+  background: #f0f4ff;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-dataset-row.tr-ds-row-clickable:focus {
+  outline: 2px solid #3388ff;
+  outline-offset: -1px;
+}
+
 .leaflet-trackreplay-datasource .tr-ds-dataset-name {
   flex: 1;
   min-width: 0;
@@ -605,6 +672,211 @@
   font-weight: bold;
   color: #3388ff;
   pointer-events: none;
+}
+
+/* ---- Dataset preview (modal, opened from a dataset row) ----
+   Unlike the drop overlay above, this one is meant to swallow interaction:
+   opening it makes the map behind inert (same mechanics as the demo's
+   settings modal). z-index sits above Leaflet's controls (1000) and the drop
+   overlay (1200) but below a host modal (the demo's settings panel is 2500). */
+.tr-ds-preview-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1500;
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Focused programmatically for the focus-scoped Esc — no visible ring. */
+.tr-ds-preview-overlay:focus {
+  outline: none;
+}
+
+.tr-ds-preview-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 90%);
+  max-height: 70%;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+  color: #333;
+}
+
+.tr-ds-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #eee;
+  font-weight: bold;
+}
+
+.tr-ds-preview-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tr-ds-preview-close {
+  flex: none;
+  line-height: 1;
+}
+
+.tr-ds-preview-summary {
+  padding: 5px 10px;
+  border-bottom: 1px solid #eee;
+  color: #666;
+  font-size: 11px;
+  word-break: break-word;
+}
+
+/* Wrapping (not horizontal scroll): a preview is for reading, and coordinate
+   lines would otherwise be thousands of pixels wide. */
+.tr-ds-preview-body {
+  flex: 1;
+  min-height: 60px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  background: #fafafa;
+  color: #333;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Format help: the rules above the example (one line each, from a message). */
+.tr-ds-format-lines {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eee;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #555;
+}
+
+.tr-ds-format-line {
+  position: relative;
+  padding-left: 10px;
+  margin: 2px 0;
+}
+
+.tr-ds-format-line::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: #aaa;
+}
+
+/* The format-help modal needs room for one column per input shape — and for
+   two code blocks (JSON + Python) inside each. */
+.tr-ds-modal-wide {
+  width: min(1280px, 95%);
+  max-height: 84%;
+}
+
+/* One column per input shape: its own rules + its own runnable example.
+   Deliberately soft (a tint, not a box) — columns, not cards. */
+.tr-ds-format-shapes {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 10px;
+  overflow: auto;
+  flex: 1;
+}
+
+.tr-ds-format-shape {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 200px;
+  padding: 8px;
+  border-radius: 4px;
+  background: #f6f7f9;
+}
+
+.tr-ds-format-shape-name {
+  font-weight: bold;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.tr-ds-format-shape-rules {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #666;
+}
+
+.tr-ds-format-shape-caption {
+  margin-top: 6px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #999;
+}
+
+/* The short why-line trailing a caption (Python blocks). */
+.tr-ds-format-caption-note {
+  text-transform: none;
+  letter-spacing: 0;
+  color: #b3b3b3;
+}
+
+.tr-ds-format-shape-example,
+.tr-ds-format-shape-python {
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  max-height: 34vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 3px;
+  color: #333;
+  font-family: 'Courier New', monospace;
+  font-size: 10.5px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A tint tells "the code that makes it" from "the data itself". */
+.tr-ds-format-shape-python {
+  background: #eef3ff;
+}
+
+.tr-ds-format-shape-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.tr-ds-format-shape-foot .tr-ds-btn {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.tr-ds-preview-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid #eee;
+}
+
+.tr-ds-preview-status {
+  flex: 1;
+  min-width: 0;
+  color: #888;
+  font-size: 11px;
+  word-break: break-word;
 }
 
 /* ---- Multi-search (leaflet-multisearch) ----
@@ -813,6 +1085,85 @@
   background: #333;
   border-color: #555;
   color: #ddd;
+}
+
+.leaflet-container.dark .leaflet-trackreplay-datasource .tr-ds-row-clickable:hover {
+  background: #333;
+}
+
+.leaflet-container.dark .tr-ds-preview-panel {
+  background: #2a2a2a;
+  color: #ddd;
+}
+
+.leaflet-container.dark .tr-ds-preview-head,
+.leaflet-container.dark .tr-ds-preview-summary,
+.leaflet-container.dark .tr-ds-preview-foot {
+  border-color: #444;
+}
+
+.leaflet-container.dark .tr-ds-preview-summary {
+  color: #aaa;
+}
+
+.leaflet-container.dark .tr-ds-preview-body {
+  background: #222;
+  color: #ccc;
+}
+
+.leaflet-container.dark .tr-ds-preview-status {
+  color: #999;
+}
+
+.leaflet-container.dark .leaflet-trackreplay-datasource .tr-ds-format-link {
+  color: #6fb0ff;
+}
+
+.leaflet-container.dark .tr-ds-format-lines {
+  border-color: #444;
+  color: #bbb;
+}
+
+.leaflet-container.dark .tr-ds-format-line::before {
+  color: #777;
+}
+
+.leaflet-container.dark .tr-ds-format-shape {
+  background: #262626;
+}
+
+.leaflet-container.dark .tr-ds-format-shape-name {
+  color: #eee;
+}
+
+.leaflet-container.dark .tr-ds-format-shape-rules {
+  color: #aaa;
+}
+
+.leaflet-container.dark .tr-ds-format-shape-example {
+  background: #1e1e1e;
+  color: #ccc;
+}
+
+.leaflet-container.dark .tr-ds-format-shape-python {
+  background: #1d2433;
+  color: #c8d6f0;
+}
+
+.leaflet-container.dark .tr-tl-dateinfo {
+  color: #aaa;
+}
+
+.leaflet-container.dark .tr-daytick {
+  background: rgba(111, 176, 255, 0.6);
+}
+
+.leaflet-container.dark .tr-ds-format-shape-caption {
+  color: #777;
+}
+
+.leaflet-container.dark .tr-ds-format-caption-note {
+  color: #666;
 }
 
 .leaflet-container.dark .tr-btn {

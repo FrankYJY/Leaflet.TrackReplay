@@ -34,14 +34,31 @@ function offsetPolyline(coords, offsetMeters) {
     var dx = b[0] - a[0];
     var dy = b[1] - a[1];
     var len = Math.sqrt(dx * dx + dy * dy);
-    if (len < 1e-9) { return null; }
+    if (len < 1e-9) { return null; } // zero-length segment: no direction
     return [-dy / len, dx / len]; // left normal
+  }
+
+  // Normals per segment, computed once. A stationary stretch (repeated
+  // coordinates — the norm in GPS data) has no direction, and a point that
+  // only borders such segments has no normal of its own; it borrows one from
+  // further along the line instead of falling over.
+  var segNormals = [];
+  for (var s = 0; s < n - 1; s++) {
+    segNormals.push(segNormal(pts[s], pts[s + 1]));
+  }
+
+  function borrowedNormal(k) {
+    for (var d = 0; d < n; d++) {
+      if (k - 1 - d >= 0 && segNormals[k - 1 - d]) { return segNormals[k - 1 - d]; }
+      if (k + d <= n - 2 && segNormals[k + d]) { return segNormals[k + d]; }
+    }
+    return null; // every point identical — nothing to offset by
   }
 
   var out = [];
   for (var k = 0; k < n; k++) {
-    var n1 = (k > 0) ? segNormal(pts[k - 1], pts[k]) : null;
-    var n2 = (k < n - 1) ? segNormal(pts[k], pts[k + 1]) : null;
+    var n1 = (k > 0) ? segNormals[k - 1] : null;
+    var n2 = (k < n - 1) ? segNormals[k] : null;
 
     var nx, ny, scale = offsetMeters;
 
@@ -60,9 +77,14 @@ function offsetPolyline(coords, offsetMeters) {
         scale = offsetMeters / Math.max(0.35, nx * n1[0] + ny * n1[1]);
       }
     } else {
-      var nn = n1 || n2;
-      nx = nn[0];
-      ny = nn[1];
+      var nn = n1 || n2 || borrowedNormal(k);
+      if (nn) {
+        nx = nn[0];
+        ny = nn[1];
+      } else {
+        nx = 0;
+        ny = 0; // degenerate: keep the point on the centreline
+      }
     }
 
     out.push([pts[k][0] + nx * scale, pts[k][1] + ny * scale]);

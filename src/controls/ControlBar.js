@@ -34,9 +34,11 @@ export function createControlBar(timeEngine, options) {
       var buttons = L.DomUtil.create('div', 'leaflet-trackreplay-controls tr-bar-buttons', container);
       fillPlaybackControls(buttons, timeEngine, options);
 
-      // Bottom row: time display + progress slider
+      // Bottom rows: time display + progress slider + the date line
       var timeline = L.DomUtil.create('div', 'leaflet-trackreplay-timeline tr-bar-timeline', container);
       fillTimelineControl(timeline, timeEngine, options);
+      // Let the session reach the timeline's runtime knobs through the bar.
+      container._trTimelineApi = timeline._trTimelineApi;
 
       // Focus-scoped playback keys (Space/←→/0-9/r) on the whole box
       bindPlaybackKeys(container, timeEngine, options);

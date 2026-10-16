@@ -83,6 +83,26 @@
       border-radius: 3px;
     }
     .demo-settings-close:hover { background: #f0f0f0; color: #333; }
+    .demo-settings-section {
+      margin: 14px 0 6px;
+      padding-top: 8px;
+      border-top: 1px solid #eee;
+      font-size: 12px;
+      font-weight: bold;
+      color: #888;
+    }
+    .demo-settings-section:first-of-type { margin-top: 2px; padding-top: 0; border-top: none; }
+
+    .demo-settings-btn {
+      background: #f4f4f4;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      cursor: pointer;
+      padding: 3px 8px;
+      font-size: 12px;
+    }
+    .demo-settings-btn:hover { background: #e4e4e4; }
+
     .demo-settings-row { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
     .demo-settings-row > .demo-settings-key { width: 80px; flex: none; color: #666; }
     .demo-settings-row label { cursor: pointer; margin-right: 12px; white-space: nowrap; }
@@ -142,6 +162,117 @@
 <script>
   // ===== Embed the data from Python =====
   var trackData = {{ data_json | safe }};
+
+  // ===== Python 生成器片段（格式说明弹层用）=====
+  // 每列一个函数：吃原始数据、吐要素。自包含、只用标准库，整段复制走即可运行。
+  // 四个函数定义在这里，第五列（整份脚本）按顺序把它们拼起来。
+  var PY_TRACKS_ZH = [
+    'def tracks(sequences, layer_path, names=None):',
+    '    """每组 [(时间, 经度, 纬度), ...] 生成一条轨迹；时间可用 datetime / 秒 / 毫秒"""',
+    '    def km(a, b):                    # 两点间公里数',
+    '        dp = math.radians(b[1] - a[1])',
+    '        dl = math.radians(b[0] - a[0])',
+    '        h = math.sin(dp / 2) ** 2 + math.cos(math.radians(a[1])) * math.cos(',
+    '            math.radians(b[1])) * math.sin(dl / 2) ** 2',
+    '        return 2 * 6371 * math.asin(math.sqrt(h))',
+    '',
+    '    def hms(ms):',
+    '        return datetime.fromtimestamp(ms / 1000).strftime("%H:%M:%S")',
+    '',
+    '    out = []',
+    '    for i, points in enumerate(sequences):',
+    '        label = names[i] if names else layer_path[-1]',
+    '        times = [int(t) for t, _, _ in points]',
+    '        coords = [[lng, lat] for _, lng, lat in points]',
+    '        speeds = [round(km(coords[j], coords[j + 1]) * 3.6e6 / (times[j + 1] - times[j]), 2)',
+    '                  for j in range(len(points) - 1)]',
+    '        out.append({',
+    '            "type": "Feature",',
+    '            "geometry": {"type": "LineString", "coordinates": coords},',
+    '            "properties": {',
+    '                "layerPath": list(layer_path),',
+    '                "isTimestampedgeojson": True,',
+    '                "times": times,',
+    '                "speeds": speeds,        # 不写也行：插件会自己算',
+    '                "drawMovingIndicator": True,',
+    '                "popups": [f"<b>{label}</b> · 第 {j + 1}/{len(speeds)} 段<br>"',
+    '                           f"{hms(times[j])} → {hms(times[j + 1])}<br>"',
+    '                           f"速度 {speeds[j]:.1f} km/h · "',
+    '                           f"距离 {km(coords[j], coords[j + 1]) * 1000:.0f} m"',
+    '                           for j in range(len(speeds))],',
+    '            },',
+    '        })',
+    '    return out',
+  ].join('\n');
+
+  var PY_EVENTS_ZH = [
+    'def events(points, layer_path, popups=None, style=None):',
+    '    """[(经度, 纬度), ...] 每个生成一个事件要素"""',
+    '    return [{',
+    '        "type": "Feature",',
+    '        "geometry": {"type": "Point", "coordinates": [lng, lat]},',
+    '        "properties": {',
+    '            "layerPath": list(layer_path),',
+    '            "element": "events",',
+    '            "popup": popups[i] if popups else f"事件 {i + 1}",',
+    '            "style": style or {"color": "#e74c3c", "radius": 10},',
+    '        },',
+    '    } for i, (lng, lat) in enumerate(points)]',
+  ].join('\n');
+
+  var PY_NODES_ZH = [
+    'def nodes(points, layer_path, popups=None, style=None):',
+    '    """[(经度, 纬度), ...] → 一个 MultiPoint 要素（多组就多调一次）"""',
+    '    props = {',
+    '        "layerPath": list(layer_path),',
+    '        "element": "background_nodes",',
+    '        "popups": popups or [f"基站 {i + 1}" for i in range(len(points))],',
+    '    }',
+    '    if style:',
+    '        props["style"] = style',
+    '    return [{',
+    '        "type": "Feature",',
+    '        "geometry": {"type": "MultiPoint",',
+    '                     "coordinates": [[lng, lat] for lng, lat in points]},',
+    '        "properties": props,',
+    '    }]',
+  ].join('\n');
+
+  var PY_AREAS_ZH = [
+    'def areas(rings, layer_path, popups=None, style=None):',
+    '    """[[(经度, 纬度), ...], ...] → 各一个 Polygon；环自动闭合"""',
+    '    out = []',
+    '    for i, ring in enumerate(rings):',
+    '        ring = list(ring)',
+    '        if ring[0] != ring[-1]:',
+    '            ring.append(ring[0])',
+    '        props = {"layerPath": list(layer_path)}',
+    '        if popups and popups[i]:',
+    '            props["popup"] = popups[i]',
+    '        if style:',
+    '            props["style"] = style',
+    '        out.append({"type": "Feature",',
+    '                    "geometry": {"type": "Polygon", "coordinates": [ring]},',
+    '                    "properties": props})',
+    '    return out',
+  ].join('\n');
+
+  // 拼一列的片段：imports + 函数 + 调用 + print
+  // stdout 重配不是装饰：Windows 控制台默认老代码页，直接打印中文 JSON 会
+  // 以 UnicodeEncodeError 崩掉，而不是把结果显示出来。
+  function pySnippet(functions, imports, call, printExpr) {
+    return [
+      imports,
+      'import sys',
+      'if hasattr(sys.stdout, "reconfigure"):',
+      '    sys.stdout.reconfigure(encoding="utf-8")   # 控制台也能打印中文',
+      '',
+      functions, '', call, '',
+      'print(json.dumps(' + (printExpr || 'features') + ', ensure_ascii=False, indent=2))',
+    ].join('\n');
+  }
+  var PY_IMPORTS_BASIC = 'import json';
+  var PY_IMPORTS_TRACKS = ['import json, math', 'from datetime import datetime'].join('\n');
 
   // ===== Initialize map =====
   var map = L.map('map', {
@@ -275,7 +406,16 @@
       styles: s.styles || {},                            // sourceId → remembered styleId
       dataDatum: s.dataDatum === 'gcj02' ? 'gcj02' : 'wgs84',
       keys: s.keys || {},                                // sourceId → API key
+      timeZone: (s.timeZone === 'utc8' || s.timeZone === 'custom') ? s.timeZone : 'browser',
+      timeZoneOffset: typeof s.timeZoneOffset === 'number' ? s.timeZoneOffset : 8,
     };
+  }
+
+  /** 设置里的显示时区 → 插件认识的 zone 规格 */
+  function timeZoneSpec() {
+    if (settings.timeZone === 'utc8') { return 8; }
+    if (settings.timeZone === 'custom') { return settings.timeZoneOffset; }
+    return 'local';
   }
   function saveSettings() {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* ignore */ }
@@ -397,7 +537,6 @@
   function createReplay() {
     replay = L.trackReplay(map, trackData, {
       colorMode: 'fixed',       // 'fixed' | 'adaptive' | 'custom'
-      speed: 1,
       loop: false,
       tickLen: 100,             // smooth 10fps
       showControls: true,
@@ -422,6 +561,18 @@
         untraveled: '未行进',
         indicator: '箭头',
       },
+      // 时间轴：显示时区 + 日期行（星期 · 第 N/M 天 · 节假日 · 时区）
+      displayTimeZone: timeZoneSpec(),
+      showDateInfo: true,
+      dateInfoLabels: {
+        weekdays: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
+        // 前缀保持字段名原样（按需求）；想中文化改成 '节假日' / '调休上班' 即可
+        holidaysField: 'holidays',
+        workdaysField: 'workdays',
+      },
+      dateInfoMessages: {
+        dayOf: function (n, total) { return '第 ' + n + '/' + total + ' 天'; },
+      },
       // Batch control: one tri-state checkbox per element type, for all objects
       showElementToggles: true,
       elementTogglesTitle: '图层类型批量显隐控制',
@@ -443,7 +594,7 @@
         add: '添加',
         load: '加载',
         pastePlaceholder: '粘贴 GeoJSON / GPX 文本…',
-        urlPlaceholder: '或输入 GeoJSON / GPX 的 URL',
+        urlPlaceholder: '输入文件 URL',
         samplesLabel: '示例',
         dropHint: '松开鼠标即可导入',
         pastedName: '贴入数据',
@@ -453,6 +604,17 @@
         clearLabel: '清空',
         clearConfirmLabel: '确认清空？',
         emptyLabel: '（暂无数据）',
+        previewHint: '点击预览数据',
+        previewCopy: '复制已显示',
+        previewCopied: '已复制',
+        previewCopyFailed: '复制失败',
+        previewDownload: '下载 .geojson',
+        previewClose: '关闭 (Esc)',
+        formatHelp: '格式说明与示例',
+        formatCopy: '复制 JSON',
+        formatCopyPython: '复制 Python',
+        formatPythonNote: '自己运行一下：打印出来的就是你要填进去的 GeoJSON，只需改数据',
+        formatFill: '填入粘贴框',
       },
       dataSourceMessages: {
         added: function (fc, meta) {
@@ -471,6 +633,189 @@
           return '「' + name + '」导入失败：' + (err && err.message ? err.message : err);
         },
         rowMeta: function (d) { return d.featureCount + ' 个要素'; },
+
+        // ---- dataset preview ----
+        previewSummary: function (s) {
+          var out = s.features + ' 个要素';
+          if (s.types) { out += ' · ' + s.types; }
+          if (s.keys) { out += ' · 字段: ' + s.keys; }
+          if (s.timeStart) { out += ' · ' + s.timeStart + ' → ' + s.timeEnd; }
+          if (s.scanned < s.total) { out += ' · 统计基于前 ' + s.scanned + ' 个'; }
+          return out;
+        },
+        previewTruncated: function (shown, total) {
+          return '已显示前 ' + shown + ' / 共 ' + total + ' 个要素';
+        },
+        previewPositionsTruncated: function (shown, total) {
+          return '该要素只显示前 ' + shown + ' / 共 ' + total + ' 个坐标点';
+        },
+        previewCharsTruncated: function () {
+          return '最后一个要素本身就超出预览预算，只显示了它的开头';
+        },
+        previewTooLarge: function (maxChars, maxMs) {
+          return '数据过大，已中止导出（超过 ' + maxChars + ' 字符 / ' + maxMs +
+            ' 毫秒）——请改用源文件或更小的子集';
+        },
+        previewMissing: function (name) { return '「' + name + '」已不存在'; },
+        importTooLarge: function (chars, limit) {
+          return '输入过大（' + chars + ' 字符，上限 ' + limit + '），已拒绝以免页面卡死';
+        },
+
+        // ---- format help (总则逐行渲染；分则一形态一列) ----
+        formatHelp: function () {
+          return [
+            '坐标按 WGS-84 解读（底图是其他坐标系时会自动换算）。',
+            '每个要素必须有 properties.layerPath —— 它在图层树中的路径（导入时缺省会补成 ["imported", 名称]）。',
+            '可回放的轨迹：isTimestampedgeojson: true + times，且 times 长度必须等于坐标点数（只处理 LineString）。',
+            '逐段数据（长度 = 坐标点数 − 1）：speeds、styles、popups；逐点数据：pointPopups（长度 = 坐标点数）。',
+            '可选：style / color（整条基础样式）、drawMovingIndicator: true、layerVisibility。',
+            '非时序要素用 properties.element 分组（如 "events"；"background_nodes" 为保留名），可选 popup / style。',
+          ].join('\n');
+        },
+        // 五种输入形态，各一竖列：只有该形态的规则 + 该形态的最小可跑示例
+        formatShapes: function () {
+          // 坐标对不换行的美化（插件自带同一个 helper）
+          var pretty = L.TrackReplay.Controls.DataSourceControl.prettyExample;
+          var track = {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [[116.4, 39.9], [116.41, 39.905], [116.42, 39.91]],
+            },
+            properties: {
+              layerPath: ['示例', '轨迹'],
+              isTimestampedgeojson: true,
+              times: [1783014039000, 1783014090000, 1783014190000],
+            },
+          };
+          // 事件与轨迹共用同一个 layerPath —— 混合示例里它们属于同一个对象
+          var eventMark = {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [116.404, 39.904] },
+            properties: {
+              layerPath: ['示例', '轨迹'],
+              element: 'events',
+              popup: '<b>掉头事件</b><br>22:41:00',
+              style: { color: '#e74c3c', radius: 12 },
+            },
+          };
+          var bgNodes = {
+            type: 'Feature',
+            geometry: {
+              type: 'MultiPoint',
+              coordinates: [[116.401, 39.901], [116.407, 39.907]],
+            },
+            properties: {
+              layerPath: ['背景', '基站'],
+              element: 'background_nodes',
+              popups: ['基站 1', '基站 2'],
+            },
+          };
+          var staticArea = {
+            type: 'Feature',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[[116.39, 39.89], [116.42, 39.89], [116.42, 39.92],
+                [116.39, 39.92], [116.39, 39.89]]],
+            },
+            properties: {
+              layerPath: ['区域', '研究区'],
+              popup: '研究区域',
+              style: { color: '#888', weight: 1, fillOpacity: 0.05 },
+            },
+          };
+          return [
+            {
+              name: '① 时序轨迹（可回放）',
+              rules: [
+                'isTimestampedgeojson: true + times，且 times 长度必须等于坐标点数（只处理 LineString）。',
+                '逐段数据（长度 = 坐标点数 − 1）：speeds（不写会自动算）、styles、popups。',
+                '逐点数据：pointPopups（长度 = 坐标点数）；不写就是该点没有弹窗。',
+                'drawMovingIndicator: true 会多出移动箭头；已行进 / 未行进随轨迹自动出现。',
+              ].join('\n'),
+              example: pretty(track),
+              python: pySnippet(PY_TRACKS_ZH, PY_IMPORTS_TRACKS, [
+                'features = tracks(',
+                '    [[(1783014039000, 116.400, 39.900),',
+                '      (1783014090000, 116.410, 39.905),',
+                '      (1783014190000, 116.420, 39.910)]],   # 多条轨迹就往里再加一组',
+                '    layer_path=["示例", "轨迹"])',
+              ].join('\n')),
+            },
+            {
+              name: '② 事件标记',
+              rules: [
+                'properties.element 给这个桶起名（"events" 或你喜欢的任意名字）。',
+                '点默认渲染成像素半径的空心环，可用 style.radius / style.color 覆盖。',
+                '画在轨迹之上，所以环始终可点；点击弹出 popup。',
+              ].join('\n'),
+              example: pretty(eventMark),
+              python: pySnippet(PY_EVENTS_ZH, PY_IMPORTS_BASIC, [
+                'features = events([(116.404, 39.904), (116.412, 39.908)],',
+                '                  layer_path=["示例", "轨迹"],',
+                '                  popups=["<b>掉头事件</b>", "<b>停留 3 分钟</b>"])',
+              ].join('\n')),
+            },
+            {
+              name: '③ 背景节点',
+              rules: [
+                '"background_nodes" 是保留名。',
+                '只支持 Point / MultiPoint；MultiPoint 可带 popups[] / styles[]（长度 = 坐标数）。',
+                '默认散点（backgroundNodesOptions.cluster 可开聚合），绘制在轨迹之下。',
+              ].join('\n'),
+              example: pretty(bgNodes),
+              python: pySnippet(PY_NODES_ZH, PY_IMPORTS_BASIC, [
+                'features = nodes([(116.401, 39.901), (116.407, 39.907)],',
+                '                 layer_path=["背景", "基站"])',
+              ].join('\n')),
+            },
+            {
+              name: '④ 静态上下文',
+              rules: [
+                '不写 properties.element，落进默认桶。',
+                '绘制在轨迹之下，所以区域不会吞掉本该给轨迹的点击。',
+                '任意几何类型；popup / style 可选。',
+              ].join('\n'),
+              example: pretty(staticArea),
+              python: pySnippet(PY_AREAS_ZH, PY_IMPORTS_BASIC, [
+                'features = areas([[(116.390, 39.890), (116.420, 39.890),',
+                '                   (116.420, 39.920), (116.390, 39.920)]],',
+                '                 layer_path=["区域", "研究区"], popups=["研究区域"])',
+              ].join('\n')),
+            },
+            {
+              name: '⑤ 混合（一个集合混用）',
+              rules: [
+                '一个 FeatureCollection 里可以混用上面所有形态 —— 每个要素按自己的属性被路由。',
+                '同一个 layerPath 的多个要素合并成"一个对象"：一个对象可同时拥有轨迹、事件和节点。',
+                '数据集也这样合并：再次导入只会"加 / 扩"同 layerPath 的对象。',
+              ].join('\n'),
+              example: pretty({
+                type: 'FeatureCollection',
+                features: [track, eventMark, bgNodes, staticArea],
+              }),
+              python: pySnippet(
+                [PY_TRACKS_ZH, PY_EVENTS_ZH, PY_NODES_ZH, PY_AREAS_ZH].join('\n\n'),
+                PY_IMPORTS_TRACKS,
+                [
+                  '# ---- 你的原始数据 ----',
+                  'point_seq = [(1783014039000, 116.400, 39.900),',
+                  '             (1783014090000, 116.410, 39.905),',
+                  '             (1783014190000, 116.420, 39.910)]',
+                  'event_pts = [(116.404, 39.904)]',
+                  'station_pts = [(116.401, 39.901), (116.407, 39.907)]',
+                  'rings = [[(116.390, 39.890), (116.420, 39.890),',
+                  '          (116.420, 39.920), (116.390, 39.920)]]',
+                  '',
+                  'features = (tracks([point_seq], ["示例", "轨迹"], names=["轨迹"])',
+                  '            + events(event_pts, ["示例", "轨迹"], popups=["<b>掉头事件</b>"])',
+                  '            + nodes(station_pts, ["背景", "基站"])',
+                  '            + areas(rings, ["区域", "研究区"], popups=["研究区域"]))',
+                ].join('\n'),
+                '{"type": "FeatureCollection", "features": features}'),
+            },
+          ];
+        },
       },
       // Multi-search (leaflet-multisearch): searches the background nodes'
       // label texts — every occurrence is a hit (duplicates included), with
@@ -560,6 +905,11 @@
       ],
     });
 
+    // 数据集变化 → 需要的年份可能变了（比如导入了一份去年的数据）
+    replay.on('datasetadd', function () { scheduleHolidays(600); });
+    replay.on('datasetremove', function () { scheduleHolidays(600); });
+    replay.on('datasetsclear', function () { scheduleHolidays(600); });
+
     // ===== Log events =====
     replay.on('start', function (d) { console.log('[trackreplay] start', d.time); });
     replay.on('pause', function (d) { console.log('[trackreplay] pause', d.time); });
@@ -614,6 +964,129 @@
   }
 
   createReplay();
+  scheduleHolidays(0);
+
+  // ===== 节假日数据（chinese-days 年度 JSON）=====
+  // 每台设备各自抓一次、按年缓存；抓不到就只是不显示节日，回放不受影响。
+  // 数据源：https://cdn.jsdelivr.net/npm/chinese-days/dist/years/{年}.json
+  //   { "holidays": {"2026-01-01": "New Year's Day,元旦,1"}, "workdays": {...} }
+  // —— 结构与插件要的两桶完全一致，值原样显示（不转化）。
+  var HOLIDAY_URL = 'https://cdn.jsdelivr.net/npm/chinese-days/dist/years/';
+  var HOLIDAY_KEY = 'tr-holidays:';
+  var HOLIDAY_TTL = 7 * 86400000;        // 已发布的年份：7 天
+  var HOLIDAY_TTL_MISSING = 86400000;    // 尚未发布（404）：1 天后重试
+  var holidayTimer = null;
+  var holidayStatusEl = null;            // 设置面板里的状态行（就地更新，不重建面板）
+
+  function holidayCacheRead(year) {
+    try {
+      var raw = localStorage.getItem(HOLIDAY_KEY + year);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }         // 隐私模式/被禁用：当作没有缓存
+  }
+  function holidayCacheWrite(year, rec) {
+    try { localStorage.setItem(HOLIDAY_KEY + year, JSON.stringify(rec)); } catch (e) { /* ignore */ }
+  }
+  function holidayCacheClear() {
+    for (var y = 2000; y <= 2100; y++) {
+      try { localStorage.removeItem(HOLIDAY_KEY + y); } catch (e) { /* ignore */ }
+    }
+  }
+
+  /** 需要的年份 = 回放范围跨的年份（按显示时区）∪ 今年 */
+  function holidayYears() {
+    var set = {};
+    set[new Date().getFullYear()] = true;
+    var range = (replay && replay.timeEngine) ? replay.timeEngine.getTimeRange() : null;
+    if (range && range.end > range.start) {
+      var zone = L.TrackReplay.Utils.TimeZone.createZone(replay.getTimeZone());
+      var y1 = +zone.dateKey(range.start).slice(0, 4);
+      var y2 = +zone.dateKey(range.end).slice(0, 4);
+      for (var y = y1; y <= y2; y++) { set[y] = true; }
+    }
+    return Object.keys(set).map(Number).sort();
+  }
+
+  function fetchHolidayYear(year) {
+    return fetch(HOLIDAY_URL + year + '.json').then(function (res) {
+      if (res.status === 404) { return { missing: true }; }   // 还没发布，不是错误
+      if (!res.ok) { throw new Error('HTTP ' + res.status); }
+      return res.json().then(function (j) {
+        return { holidays: j.holidays || {}, workdays: j.workdays || {} };
+      });
+    });
+  }
+
+  function scheduleHolidays(delay) {
+    if (holidayTimer) { clearTimeout(holidayTimer); }
+    holidayTimer = setTimeout(function () { ensureHolidays(false); }, delay == null ? 300 : delay);
+  }
+
+  /** 缺哪年抓哪年；过期的后台静默重抓；失败退回缓存。抓完 setCalendar（不重建）。 */
+  function ensureHolidays(force) {
+    if (!replay) { return; }
+    var years = holidayYears();
+    var now = Date.now();
+    var merged = { holidays: {}, workdays: {} };
+    var jobs = [];
+
+    years.forEach(function (year) {
+      var cached = holidayCacheRead(year);
+      var ttl = (cached && cached.missing) ? HOLIDAY_TTL_MISSING : HOLIDAY_TTL;
+      var stale = !cached || force || (now - cached.fetchedAt) > ttl;
+      var job = stale
+        ? fetchHolidayYear(year).then(function (fresh) {
+            var saved = {
+              fetchedAt: Date.now(),
+              missing: !!fresh.missing,
+              holidays: fresh.holidays || {},
+              workdays: fresh.workdays || {},
+            };
+            holidayCacheWrite(year, saved);
+            return saved;
+          }).catch(function () { return cached; })       // 离线/被拦：用旧的
+        : Promise.resolve(cached);
+
+      jobs.push(job.then(function (rec) {
+        if (!rec || rec.missing) { return; }
+        for (var k in rec.holidays) { merged.holidays[k] = rec.holidays[k]; }
+        for (var k2 in rec.workdays) { merged.workdays[k2] = rec.workdays[k2]; }
+      }));
+    });
+
+    Promise.all(jobs).then(function () {
+      replay.setCalendar(merged);
+      if (holidayStatusEl && holidayStatusEl.parentNode) {
+        holidayStatusEl.textContent = holidayStatusText();
+      }
+    });
+  }
+
+  function holidayStatusText() {
+    var years = holidayYears();
+    var bits = years.map(function (y) {
+      var rec = holidayCacheRead(y);
+      if (!rec) { return y + ' 未缓存'; }
+      if (rec.missing) { return y + ' 尚未发布'; }
+      var count = Object.keys(rec.holidays || {}).length + Object.keys(rec.workdays || {}).length;
+      var days = Math.max(0, Math.round((Date.now() - rec.fetchedAt) / 86400000));
+      return y + ' 已缓存 ' + count + ' 条（' + days + ' 天前更新）';
+    });
+    return '节假日数据：' + bits.join(' · ');
+  }
+
+  /** 时区改了 → 时间轴就地切换，并重算需要的年份（跨年边界会变） */
+  function applyTimeZone() {
+    if (replay) { replay.setTimeZone(timeZoneSpec()); }
+    scheduleHolidays(400);
+  }
+
+  function switchTimeZone(value) {
+    settings.timeZone = value;
+    saveSettings();
+    updateSettingsPanel();
+    applyTimeZone();
+  }
 
   // ===== Settings panel (modal — the map behind it is inert) =====
   var panelOverlay = null;
@@ -682,6 +1155,8 @@
     closeBtn.title = '关闭 (Esc)';
     L.DomEvent.on(closeBtn, 'click', closeSettingsPanel);
 
+    settingsSection(panel, '底图与密钥');
+
     // 地图来源 — switching sources also switches the map frame's datum
     var sourceRow = settingsRow(panel, '地图来源');
     var sourceChoices = [];
@@ -702,6 +1177,8 @@
     keyInput.placeholder = currentSource().keyHint || '';
     keyInput.value = currentKey();
     L.DomEvent.on(keyInput, 'change', function () { applyKey(keyInput.value.trim()); });
+
+    settingsSection(panel, '坐标系');
 
     // 数据坐标系 — the datum the INPUT data is in
     var datumRow = settingsRow(panel, '数据坐标系');
@@ -731,6 +1208,64 @@
       '底图风格（标准 / 卫星 / 深色…）用右上角图层控件的“底图”单选组切换。<br>' +
       '底图与数据坐标系一致时原生对齐；不一致时数据在解析时转换一次。地图上' +
       '显示、量测得到的坐标始终是<b>底图坐标系</b>。设置会被记住（localStorage）。';
+
+    // ---- 时间与时区 ----
+    settingsSection(panel, '时间与时区');
+
+    var tzRow = settingsRow(panel, '显示时区');
+    radioChoice(tzRow, 'demo-tz', [
+      { value: 'browser', label: '浏览器默认' },
+      { value: 'utc8', label: 'UTC+8' },
+      { value: 'custom', label: '自定义' },
+    ], settings.timeZone, function (v) { switchTimeZone(v); });
+
+    if (settings.timeZone === 'custom') {
+      var offsetRow = settingsRow(panel, '偏移 (小时)');
+      var offsetInput = L.DomUtil.create('input', 'demo-settings-input', offsetRow);
+      offsetInput.type = 'number';
+      offsetInput.step = '0.5';
+      offsetInput.min = '-12';
+      offsetInput.max = '14';
+      offsetInput.value = String(settings.timeZoneOffset);
+      L.DomEvent.on(offsetInput, 'change', function () {
+        var v = parseFloat(offsetInput.value);
+        if (isFinite(v) && v >= -12 && v <= 14) {
+          settings.timeZoneOffset = v;
+          saveSettings();
+          applyTimeZone();
+        }
+      });
+    }
+
+    // 节假日数据（chinese-days 年度 JSON，按年缓存）
+    var holidayRow = settingsRow(panel, '节假日数据');
+    var refreshBtn = L.DomUtil.create('button', 'demo-settings-btn', holidayRow);
+    refreshBtn.type = 'button';
+    refreshBtn.textContent = '立即更新';
+    L.DomEvent.on(refreshBtn, 'click', function () { ensureHolidays(true); });
+    var clearBtn = L.DomUtil.create('button', 'demo-settings-btn', holidayRow);
+    clearBtn.type = 'button';
+    clearBtn.textContent = '清除缓存';
+    L.DomEvent.on(clearBtn, 'click', function () {
+      holidayCacheClear();
+      ensureHolidays(true);
+    });
+
+    holidayStatusEl = L.DomUtil.create('div', 'demo-settings-status', panel);
+    holidayStatusEl.textContent = holidayStatusText();
+
+    var tzHint = L.DomUtil.create('div', 'demo-settings-hint', panel);
+    tzHint.innerHTML =
+      '显示时区决定时间轴怎么读：时间标签、双击编辑、进度条上的<b>日界线</b>、' +
+      '以及节假日按哪一天查表，全部跟着它走（默认跟随浏览器）。<br>' +
+      '节假日数据来自 chinese-days 的年度 JSON（结构与插件一致，值原样显示）；' +
+      '每台设备各自按年缓存在 localStorage，抓不到时只是不显示节日，不影响回放。';
+  }
+
+  function settingsSection(panel, title) {
+    var el = L.DomUtil.create('div', 'demo-settings-section', panel);
+    el.textContent = title;
+    return el;
   }
 
   // ===== Keyboard shortcuts =====

@@ -88,6 +88,14 @@ export function createTimeEngine(options) {
   };
 
   /**
+   * Get the time range the engine was given (ms).
+   * @returns {{start: number, end: number}}
+   */
+  engine.getTimeRange = function () {
+    return { start: engine._startTime, end: engine._endTime };
+  };
+
+  /**
    * Get the current progress as a fraction 0-1.
    * @returns {number}
    */

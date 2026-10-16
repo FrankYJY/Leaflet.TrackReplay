@@ -181,11 +181,17 @@ export function createViewFollowControl(map, options) {
         { value: 'named', label: 'Select...' },
       ];
 
+      // Radio mutual exclusion is keyed by `name` document-wide, so a fixed
+      // name would make every TrackReplay session on the page share one group:
+      // picking a mode in one panel would silently uncheck the other panel's
+      // radio while its own mode stayed active. Stamp a per-instance group.
+      var radioGroup = 'tr-vf-' + L.stamp(this);
+
       for (var i = 0; i < modes.length; i++) {
         var label = L.DomUtil.create('label', 'tr-vf-option', body);
         var radio = L.DomUtil.create('input', '', label);
         radio.type = 'radio';
-        radio.name = 'tr-viewfollow';
+        radio.name = radioGroup;
         radio.value = modes[i].value;
         if (modes[i].value === mode) { radio.checked = true; }
 
