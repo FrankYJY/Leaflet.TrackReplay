@@ -441,6 +441,71 @@
       // switches that element between clustered and raw scatter rendering
       clusterScatterTitle: '聚合散点设置',
       clusterScatterLabels: { cluster: '聚合', scatter: '散点' },
+      // Data import panel — the session accepts new data at runtime; this
+      // panel ingests GeoJSON / GPX via file pick, drag & drop onto the map,
+      // paste, URL, or the built-in samples below
+      showDataImport: true,
+      dataImportTitle: '导入数据',
+      dataImportLabels: {
+        pick: '选择文件…',
+        add: '添加',
+        load: '加载',
+        pastePlaceholder: '粘贴 GeoJSON / GPX 文本…',
+        urlPlaceholder: '或输入 GeoJSON / GPX 的 URL',
+        samplesLabel: '示例',
+        dropHint: '松开鼠标即可导入',
+        pastedName: '贴入数据',
+      },
+      dataImportMessages: {
+        added: function (fc, meta) {
+          var s = '已加入「' + meta.name + '」：' + fc.features.length + ' 个要素';
+          if (meta.report) {
+            s += '（' + meta.report.segments + ' 段轨迹 / ' + meta.report.points + ' 个点）';
+          }
+          return s;
+        },
+        degraded: function (report, name) {
+          return '「' + name + '」有 ' + report.staticSegments +
+            ' 段没有时间戳，已作为静态线导入（不参与回放）';
+        },
+        empty: function (name) { return '「' + name + '」中没有可导入的轨迹或航点'; },
+        error: function (err, name) {
+          return '「' + name + '」导入失败：' + (err && err.message ? err.message : err);
+        },
+      },
+      dataImportSamples: [
+        { label: '示例轨迹', data: function () {
+            var t0 = Date.now(), coords = [], times = [];
+            for (var i = 0; i < 40; i++) {
+              var r = 0.004 * (1 + i / 30);
+              coords.push([116.40 + r * Math.cos(i / 6), 39.90 + 0.75 * r * Math.sin(i / 6)]);
+              times.push(t0 + i * 5000);
+            }
+            return { type: 'FeatureCollection', features: [{
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: coords },
+              properties: {
+                layerPath: ['导入', '示例轨迹'], isTimestampedgeojson: true,
+                times: times, drawMovingIndicator: true,
+              },
+            }] };
+        } },
+        { label: '示例采样点', data: function () {
+            var coords = [], popups = [];
+            for (var i = 0; i < 30; i++) {
+              coords.push([116.39 + Math.random() * 0.04, 39.88 + Math.random() * 0.04]);
+              popups.push('示例采样点 #' + i);
+            }
+            return { type: 'FeatureCollection', features: [{
+              type: 'Feature',
+              geometry: { type: 'MultiPoint', coordinates: coords },
+              properties: {
+                layerPath: ['导入', '示例采样点'], element: 'background_nodes',
+                popups: popups,
+              },
+            }] };
+        } },
+      ],
     });
 
     // ===== Log events =====

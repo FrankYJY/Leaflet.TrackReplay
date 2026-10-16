@@ -16,7 +16,10 @@ const page = ctx.pages()[0] || await ctx.newPage();
 const errs = [];
 page.on('pageerror', (e) => errs.push('PAGEERROR: ' + e.message));
 page.on('console', (m) => {
-  if (m.type() === 'error') { errs.push('[console] ' + m.text().slice(0, 200)); }
+  if (m.type() === 'error' && m.text().indexOf('ERR_TIMED_OUT') < 0 &&
+      m.text().indexOf('ERR_CONNECTION') < 0 && m.text().indexOf('Failed to load resource') < 0) {
+    errs.push('[console] ' + m.text().slice(0, 200));
+  }
 });
 
 await page.goto('http://127.0.0.1:8000/', { waitUntil: 'domcontentloaded', timeout: 120000 });

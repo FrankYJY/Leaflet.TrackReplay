@@ -31,8 +31,10 @@ import { createColorLegend } from './controls/ColorLegend.js';
 import { createElementToggles } from './controls/ElementToggles.js';
 import { createInfoLabels } from './controls/InfoLabels.js';
 import { createClusterScatterControl } from './controls/ClusterScatterControl.js';
+import { createDataImportControl } from './controls/DataImportControl.js';
 
 import { wgs84ToGcj02, gcj02ToWgs84, outOfChina } from './utils/GCJ02.js';
+import { parseGPX } from './utils/GPX.js';
 import { createEventBus } from './utils/EventBus.js';
 
 /** Playback events re-emitted on the session bus (forwarded per build). */
@@ -110,6 +112,16 @@ var PLAYBACK_EVENTS = ['start', 'pause', 'stop', 'finished', 'tick', 'timechange
  * @param {Object[]} [options.baseLayers]      - [{ label, layer }] basemaps for
  *        the layer tree's radio group (host owns the tile layers)
  * @param {string} [options.baseLayersLabel='Basemap'] - label of that group
+ * @param {boolean} [options.showDataImport=false] - (session-level) show the
+ *        data import panel: file picker, drag & drop onto the map, paste,
+ *        URL and sample datasets; it feeds `addDataset()` and survives every
+ *        rebuild
+ * @param {string} [options.dataImportPosition='topleft'] - panel corner
+ * @param {string} [options.dataImportTitle='Import data'] - panel title
+ * @param {Object} [options.dataImportLabels]   - panel UI strings
+ * @param {Object} [options.dataImportMessages] - report text builders
+ *        ({ added, degraded, empty, error })
+ * @param {Object[]} [options.dataImportSamples] - [{ label, data }] samples
  * @returns {Object} internal handle
  */
 function buildReplay(map, featureCollection, options, initialCluster) {
@@ -870,6 +882,7 @@ export function trackReplay(map, dataOrArray, options) {
   var instance = {
     map: map,
     datasets: container,
+    dataImportControl: null,
     dataDatum: options.dataDatum || 'wgs84',
     mapDatum: options.mapDatum || 'wgs84',
 
@@ -1009,11 +1022,30 @@ export function trackReplay(map, dataOrArray, options) {
         currentBuild.destroy();
         currentBuild = null;
       }
+      if (instance.dataImportControl && instance.dataImportControl._map) {
+        map.removeControl(instance.dataImportControl);
+      }
+      instance.dataImportControl = null;
       container.clear();
       syncFields();
       bus.clear();
     },
   };
+
+  // ---- Session-level data import panel (survives every rebuild) ----
+  if (options.showDataImport) {
+    instance.dataImportControl = createDataImportControl({
+      position: options.dataImportPosition || 'topleft',
+      title: options.dataImportTitle || 'Import data',
+      labels: options.dataImportLabels,
+      messages: options.dataImportMessages,
+      samples: options.dataImportSamples,
+      onData: function (fc, meta) {
+        instance.addDataset(fc, { name: meta && meta.name });
+      },
+    });
+    map.addControl(instance.dataImportControl);
+  }
 
   // ---- Initial datasets → first build ----
   for (var di = 0; di < initial.length; di++) {
@@ -1057,6 +1089,7 @@ if (typeof L !== 'undefined') {
     ElementToggles: { createElementToggles: createElementToggles },
     InfoLabels: { createInfoLabels: createInfoLabels },
     ClusterScatterControl: { createClusterScatterControl: createClusterScatterControl },
+    DataImportControl: { createDataImportControl: createDataImportControl },
   };
 
   L.TrackReplay.Utils = {
@@ -1064,6 +1097,9 @@ if (typeof L !== 'undefined') {
       wgs84ToGcj02: wgs84ToGcj02,
       gcj02ToWgs84: gcj02ToWgs84,
       outOfChina: outOfChina,
+    },
+    GPX: {
+      parseGPX: parseGPX,
     },
   };
 

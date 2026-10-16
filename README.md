@@ -20,6 +20,9 @@
 - 🗂️ **Dataset sessions** — add / remove / clear GeoJSON datasets at runtime,
   merged by `layerPath`; playback time, visibility, batch labels and modes all
   survive every data change
+- 📥 **Data import panel** — ingest GeoJSON / GPX by file pick, drag & drop
+  onto the map, paste, URL or samples; GPX without timestamps degrades to
+  static lines, called out in a per-import report
 - 🏃 **Moving indicators** — animated markers with bearing-based rotation
 - 🛤️ **Dynamic route coloring** — traveled (red) / untraveled (blue) edge rendering
 - 👁️ **View following** — auto-pan to follow moving objects (latest/random/named/off)
@@ -127,6 +130,12 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `clusterScatterPosition` | `string` | `'topright'` | Corner of that panel |
 | `clusterScatterTitle` | `string` | `'Cluster / Scatter'` | Title of that panel |
 | `clusterScatterLabels` | `object` | `{cluster:'Cluster', scatter:'Scatter'}` | Option labels inside the background-nodes section |
+| `showDataImport` | `boolean` | `false` | Show the data import panel (file picker / drag & drop / paste / URL / samples) |
+| `dataImportPosition` | `string` | `'topleft'` | Corner of that panel |
+| `dataImportTitle` | `string` | `'Import data'` | Title of that panel |
+| `dataImportLabels` | `object` | English defaults | Panel UI strings (`pick/add/load/pastePlaceholder/urlPlaceholder/samplesLabel/dropHint/pastedName`) |
+| `dataImportMessages` | `object` | English defaults | Report text builders `{added, degraded, empty, error}` |
+| `dataImportSamples` | `Object[]` | — | `[{label, data}]` sample datasets shown as buttons |
 | `showElementToggles` | `boolean` | `true` | Show the batch control (one tri-state checkbox per element type, across all objects) |
 | `elementTogglesPosition` | `string` | `'topright'` | Corner for the batch control |
 | `elementTogglesTitle` | `string` | `'Batch'` | Title of the batch control |
@@ -261,6 +270,31 @@ replay.getDataset(id);      // { id, name, featureCollection }
   `'stopped'`, `getCurrentTime()` is `null`); the first `addDataset()` builds
   everything, and `clearDatasets()` returns to that empty, reusable state.
   `destroy()` remains the full teardown.
+
+#### Data import panel (`showDataImport`, default off)
+
+An optional panel — session-scoped, so it survives every rebuild — that
+ingests data through five channels:
+
+| Channel | Notes |
+|---------|-------|
+| Drag & drop onto the map | the whole map is the drop target, with a highlight overlay |
+| File picker | `.json` / `.geojson` / `.gpx` |
+| Paste | GeoJSON or GPX text |
+| URL | fetched with `fetch`; the server must allow CORS (or be same-origin) |
+| Samples | `dataImportSamples: [{ label, data }]` — one-click example datasets |
+
+- GeoJSON may be a `FeatureCollection`, a single `Feature`, or an array of
+  either. Features **without** a `layerPath` get `['imported', <name>]` so
+  every import lands in its own tree branch.
+- **GPX** is converted by `L.TrackReplay.Utils.GPX.parseGPX`: segments whose
+  points all carry `<time>` become replayable TimestampEdgeoJSON (moving
+  indicator on by default); segments without time are imported as **static
+  lines** and flagged in the report — they cannot participate in playback.
+  Each `<trkseg>` becomes its own feature (gaps are never bridged), and
+  `<wpt>` waypoints become static points with name/desc popups.
+- Every import is reported in the panel (added / degraded / empty / error);
+  the texts come from `dataImportMessages`, so they can be localized.
 
 ### TimestampEdgeoJSON Format
 
@@ -542,6 +576,12 @@ var parsed = L.TrackReplay.Core.DataParser.parseFeatureCollection(data, colorMap
 var gcj = L.TrackReplay.Utils.GCJ02.wgs84ToGcj02(116.40, 39.90);
 var wgs = L.TrackReplay.Utils.GCJ02.gcj02ToWgs84(gcj[0], gcj[1]);
 
+// GPX → GeoJSON: timed segments become replayable TimestampEdgeoJSON,
+// time-less segments become static lines (see the report)
+var gpx = L.TrackReplay.Utils.GPX.parseGPX(gpxText, { layerPath: ['gpx', 'watch'] });
+// gpx.featureCollection — a GeoJSON FeatureCollection
+// gpx.report — { segments, timedSegments, staticSegments, points, waypoints }
+
 // Create individual layers manually
 var trackLayer = L.TrackReplay.Layers.TrackLayer.createTrackLayer(parsed.layerFeatures[0].features);
 
@@ -575,10 +615,11 @@ python server.py
 
 ```
 ├── src/
-│   ├── TrackReplay.js          # Main entry point
+│   ├── TrackReplay.js          # Session facade + internal buildReplay builder
 │   ├── TrackReplay.css         # Styles
 │   ├── core/
 │   │   ├── DataParser.js       # GeoJSON parsing & processing
+│   │   ├── DatasetContainer.js # Runtime datasets (add/remove/clear/merge)
 │   │   ├── ColorMapper.js      # Speed-to-color mapping
 │   │   ├── TimeEngine.js       # Shared time-axis engine
 │   │   └── LayerTreeBuilder.js # Layer tree construction
@@ -588,14 +629,22 @@ python server.py
 │   │   ├── MovingIndicator.js  # Animated moving marker
 │   │   ├── DynamicRoute.js     # Traveled/untraveled route
 │   │   ├── StaticLayer.js      # Regular GeoJSON layer
-│   │   └── BackgroundNodesLayer.js # Low-pane cluster layer for background nodes
+│   │   └── BackgroundNodesLayer.js # Clickable scatter/cluster dots (background nodes)
 │   ├── controls/
 │   │   ├── PlaybackControls.js # Play/pause/stop/speed UI
 │   │   ├── TimelineControl.js  # Progress slider + time editor
+│   │   ├── ControlBar.js       # Buttons + timeline in one box
 │   │   ├── ViewFollowControl.js# Map view following
+│   │   ├── ElementToggles.js   # Batch show/hide by element type
+│   │   ├── InfoLabels.js       # Batch label display
+│   │   ├── ClusterScatterControl.js # Cluster/scatter settings panel
+│   │   ├── DataImportControl.js# Import panel (file/drop/paste/URL/samples)
 │   │   └── ColorLegend.js      # Speed color legend
 │   └── utils/
 │       ├── GeoUtils.js          # Distance, bearing, interpolation
+│       ├── GCJ02.js             # WGS-84 ⇄ GCJ-02 conversion
+│       ├── GPX.js               # GPX → GeoJSON conversion
+│       ├── EventBus.js          # Session event bus
 │       └── TimeUtils.js         # Timestamp formatting/parsing
 ├── examples/
 │   ├── server.py               # Python dev server
