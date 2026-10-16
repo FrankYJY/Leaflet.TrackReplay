@@ -113,6 +113,7 @@ function collectSearchRecords(allLayers, elementKeys) {
  * @param {string} [options.controlBarPosition='bottomleft'] - corner of the combined box
  * @param {boolean} [options.showLegend=true]       - show color legend
  * @param {boolean} [options.showViewFollow=true]   - show view follow control
+ * @param {string} [options.viewFollowTitle='Follow:'] - title of the follow control
  * @param {Function} [options.bearingTransform]     - fn(bearing) => newBearing
  * @param {Object} [options.trackLayerOptions]      - options for track layer
  * @param {Object} [options.pointClusterOptions]    - options for point cluster
@@ -591,7 +592,9 @@ function buildReplay(map, featureCollection, options, initialCluster) {
   // ---- 8. View Follow ----
   var viewFollow = null;
   if (options.showViewFollow !== false) {
-    viewFollow = createViewFollowControl(map);
+    viewFollow = createViewFollowControl(map, {
+      title: options.viewFollowTitle,
+    });
     map.addControl(viewFollow.control);
 
     // Register all moving indicators (with their track time range, so the

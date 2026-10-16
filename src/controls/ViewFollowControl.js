@@ -164,7 +164,7 @@ export function createViewFollowControl(map, options) {
 
       var container = L.DomUtil.create('div', 'leaflet-trackreplay-viewfollow');
       var title = L.DomUtil.create('div', 'tr-vf-title', container);
-      title.textContent = 'Follow:';
+      title.textContent = options.title || 'Follow:';
 
       // The title doubles as the fold header; the body starts expanded.
       var body = L.DomUtil.create('div', 'tr-vf-body', container);

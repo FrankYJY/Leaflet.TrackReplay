@@ -404,6 +404,7 @@
       showTimeline: true,
       showLegend: true,
       showViewFollow: true,
+      viewFollowTitle: '播放时实时跟踪移动对象',
       // ---- Coordinate frames (see the GCJ-02 note above) ----
       dataDatum: settings.dataDatum,      // datum of the input track data
       mapDatum: currentSource().datum,    // datum of the active basemap
@@ -423,11 +424,11 @@
       },
       // Batch control: one tri-state checkbox per element type, for all objects
       showElementToggles: true,
-      elementTogglesTitle: '批量',
+      elementTogglesTitle: '图层类型批量显隐控制',
       // Batch label display control (rows = objects, columns = element types):
       // checking a cell batch-opens those existing popups
       showInfoLabels: true,
-      infoLabelsTitle: '批量标签',
+      infoLabelsTitle: '批量标签显隐控制',
       // Cluster / scatter settings panel — its background-nodes section
       // switches that element between clustered and raw scatter rendering
       clusterScatterTitle: '聚合散点设置',

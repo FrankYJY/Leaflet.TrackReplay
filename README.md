@@ -128,6 +128,7 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `controlBarPosition` | `string` | `'bottomleft'` | Corner of the combined playback + timeline box |
 | `showLegend` | `boolean` | `true` | Show speed color legend |
 | `showViewFollow` | `boolean` | `true` | Show view follow control |
+| `viewFollowTitle` | `string` | `'Follow:'` | Title of the follow control |
 | `bearingTransform` | `(bearing: number) => number \| null` | pass-through | Transform bearing before rotation. Rotation is on by default; pass `null` to disable (slightly faster) |
 | `rotationOffset` | `number` | `0` | Degrees added to the bearing (e.g. `90` if the icon points right) |
 | `movingIcon` | `L.Icon \| L.DivIcon` | — | Custom icon for moving indicators |
