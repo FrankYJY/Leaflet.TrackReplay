@@ -135,6 +135,8 @@ function collectSearchRecords(allLayers, elementKeys) {
  *        clustered and raw scatter rendering at runtime
  * @param {string} [options.clusterScatterPosition='topright'] - control corner
  * @param {string} [options.clusterScatterTitle='Cluster / Scatter'] - panel title
+ * @param {boolean} [options.clusterScatterExpanded=false] - start the panel
+ *        unfolded (its title is the fold header)
  * @param {Object} [options.clusterScatterLabels] - { cluster, scatter } option
  *        labels (defaults 'Cluster' / 'Scatter'; the section header reuses
  *        elementLabels.background_nodes)
@@ -584,6 +586,7 @@ function buildReplay(map, featureCollection, options, initialCluster) {
     clusterScatterControl = createClusterScatterControl({
       position: options.clusterScatterPosition || 'topright',
       title: options.clusterScatterTitle || 'Cluster / Scatter',
+      expanded: options.clusterScatterExpanded,
       sectionLabel: elementLabel.background_nodes,
       clusterLabel: (options.clusterScatterLabels && options.clusterScatterLabels.cluster) || 'Cluster',
       scatterLabel: (options.clusterScatterLabels && options.clusterScatterLabels.scatter) || 'Scatter',

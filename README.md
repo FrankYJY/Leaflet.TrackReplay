@@ -139,7 +139,8 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `backgroundNodesOptions` | `object` | — | Options for the `background_nodes` element: `{ style, cluster (default false — scatter), clusterOptions }` |
 | `showClusterScatterControl` | `boolean` | `true` | Show the cluster / scatter settings panel (only when the data has background nodes) |
 | `clusterScatterPosition` | `string` | `'topright'` | Corner of that panel |
-| `clusterScatterTitle` | `string` | `'Cluster / Scatter'` | Title of that panel |
+| `clusterScatterTitle` | `string` | `'Cluster / Scatter'` | Title of that panel (doubles as its fold header) |
+| `clusterScatterExpanded` | `boolean` | `false` | Start the cluster/scatter panel unfolded |
 | `clusterScatterLabels` | `object` | `{cluster:'Cluster', scatter:'Scatter'}` | Option labels inside the background-nodes section |
 | `showDataSource` | `boolean` | `false` | Show the data source panel (dataset list + import channels) |
 | `dataSourcePosition` | `string` | `'topleft'` | Corner of that panel |

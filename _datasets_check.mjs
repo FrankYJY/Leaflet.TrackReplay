@@ -88,7 +88,7 @@ out.initial = await page.evaluate(() => ({
   hasContainerExport: !!(L.TrackReplay.Core.DatasetContainer && L.TrackReplay.Core.DatasetContainer.createDatasetContainer),
   controlBar: !!document.querySelector('.leaflet-trackreplay-controlbar'),
   togglesDefaultCollapsed: replay.elementToggles.isCollapsed(),
-  clusterScatterDefaultExpanded: !replay.clusterScatterControl.isCollapsed(),
+  clusterScatterDefaultCollapsed: replay.clusterScatterControl.isCollapsed(),
   viewFollowDefaultCollapsed: replay.viewFollow.control.isCollapsed(),
   infoLabelsDefaultCollapsed: replay.infoLabels.isCollapsed(),
 }));
@@ -114,13 +114,11 @@ out.before = await page.evaluate(() => {
   cs.querySelectorAll('input[type=radio]').forEach(function (r) {
     if (r.value === 'cluster') { r.click(); }
   });
-  // flip the foldable panels away from their defaults + expand the label
-  // table — none of these may reset when the dataset change rebuilds the
-  // controls (toggles & follow default-collapsed → open; cluster default-open
-  // → folded)
+  // flip some foldable panels away from their (all-collapsed) defaults —
+  // toggles / cluster-scatter / labels open, Follow left collapsed. None of
+  // these may reset when the dataset change rebuilds the controls.
   document.querySelector('.leaflet-trackreplay-elementtoggles .tr-et-title').click();
   document.querySelector('.leaflet-trackreplay-clusterscatter .tr-cs-title').click();
-  document.querySelector('.leaflet-trackreplay-viewfollow .tr-vf-title').click();
   document.querySelector('.leaflet-trackreplay-infolabels .tr-il-title').click();
   return {
     time: replay.getCurrentTime(),
@@ -158,8 +156,8 @@ out.afterAdd = await page.evaluate(() => {
     bgIsClusterGroup: typeof replay.allLayers['background/基站'].elements
       .find(function (e) { return e.key === 'background_nodes'; }).layer.refreshClusters === 'function',
     panelsPersist: !replay.elementToggles.isCollapsed() &&
-      replay.clusterScatterControl.isCollapsed() &&
-      !replay.viewFollow.control.isCollapsed() &&
+      !replay.clusterScatterControl.isCollapsed() &&
+      replay.viewFollow.control.isCollapsed() &&
       !replay.infoLabels.isCollapsed(),
     event: window.__dsEvents.filter(function (e) { return e.evt === 'datasetadd'; }).pop(),
   };

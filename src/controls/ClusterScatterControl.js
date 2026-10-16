@@ -40,10 +40,12 @@ export function createClusterScatterControl(options) {
       var title = L.DomUtil.create('div', 'tr-cs-title', container);
       title.textContent = options.title || 'Cluster / Scatter';
 
-      // The title doubles as the fold header; the body starts expanded.
+      // The title doubles as the fold header; collapsed by default
+      // (`options.expanded: true` starts it open).
+      this._container = container;
       var body = L.DomUtil.create('div', 'tr-cs-body', container);
       this._bodyEl = body;
-      this._collapsed = false;
+      this._collapsed = options.expanded !== true;
       title.onclick = function () { self.setCollapsed(!self._collapsed); };
 
       // ---- one section per element type (currently: background nodes) ----
@@ -87,6 +89,7 @@ export function createClusterScatterControl(options) {
       }
 
       this.setValue(options.value === 'cluster' ? 'cluster' : 'scatter');
+      this.setCollapsed(this._collapsed);
 
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);
