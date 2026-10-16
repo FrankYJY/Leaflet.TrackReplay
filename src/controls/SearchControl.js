@@ -165,6 +165,27 @@ export function createSearchControl(options) {
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);
 
+      // Focus-scoped keys: while the control itself has focus, ←/→/↑/↓ cycle
+      // the hits and Enter advances. Inputs and buttons keep their native
+      // behavior (typing, caret movement, activation) — deeper focus wins.
+      container.tabIndex = 0;
+      container.addEventListener('keydown', function (e) {
+        var t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
+            t.tagName === 'BUTTON' || t.isContentEditable === true)) {
+          return;
+        }
+        var k = e.keyCode;
+        if (k === 37 || k === 38) { e.preventDefault(); self._step(-1); }      // ← ↑
+        else if (k === 39 || k === 40) { e.preventDefault(); self._step(1); }  // → ↓
+        else if (k === 13) { e.preventDefault(); self._step(1); }              // Enter
+        else if (k === 27) {                                                   // Esc
+          e.preventDefault();
+          if (self._query) { self._input.value = ''; self._search(''); }
+          else { self._close(); }
+        }
+      });
+
       this._setCount('');
       return container;
     },

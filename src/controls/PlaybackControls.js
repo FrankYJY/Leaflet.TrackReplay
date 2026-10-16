@@ -8,6 +8,92 @@
 import { formatSpeedLabel } from '../utils/TimeUtils.js';
 
 /**
+ * True for events originating in form controls — there the keyboard keeps
+ * its native meaning (typing, native button activation, caret movement).
+ */
+function isFormTarget(el) {
+  if (!el) { return false; }
+  var tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+    tag === 'BUTTON' || el.isContentEditable === true;
+}
+
+/**
+ * Scope the playback keyboard shortcuts to `container`.
+ *
+ * The keys work while the control itself has focus and never leak into
+ * inputs or the rest of the page (the classic "number keys change speed
+ * while I'm typing a search query" bug cannot happen — there is no global
+ * handler). The container is made focusable; deeper focus (an input, the
+ * speed select, a button) always wins via its native behavior.
+ *
+ *   Space     play / pause
+ *   ← / →     seek ∓5 s
+ *   0-9       0 → 1×, 1-9 → the Nth speed-ladder entry
+ *   r         stop
+ *
+ * @param {HTMLElement} container
+ * @param {Object} timeEngine
+ * @param {Object} [options]
+ */
+export function bindPlaybackKeys(container, timeEngine, options) {
+  options = options || {};
+  container.tabIndex = 0;
+
+  container.addEventListener('keydown', function (e) {
+    if (isFormTarget(e.target)) { return; }
+
+    var key = e.key;
+
+    if (key === ' ' || e.keyCode === 32) {
+      e.preventDefault();
+      if (e.repeat) { return; } // holding Space must not flicker play/pause
+      if (timeEngine.getState() === 'playing') { timeEngine.pause(); }
+      else { timeEngine.play(); }
+      return;
+    }
+
+    if (key === 'ArrowLeft') {
+      e.preventDefault();
+      timeEngine.seek(timeEngine.getCurrentTime() - 5000);
+      return;
+    }
+    if (key === 'ArrowRight') {
+      e.preventDefault();
+      timeEngine.seek(timeEngine.getCurrentTime() + 5000);
+      return;
+    }
+    if (key === 'r' || key === 'R') {
+      e.preventDefault();
+      timeEngine.stop();
+      return;
+    }
+
+    // 0-9 pick from the speed ladder (0 = the entry for 1×)
+    if (key === '0') {
+      e.preventDefault();
+      timeEngine.setSpeed(1);
+      var select = container.querySelector('.tr-speed-select');
+      if (select) {
+        for (var i = 0; i < select.options.length; i++) {
+          if (parseFloat(select.options[i].value) === 1) { select.selectedIndex = i; break; }
+        }
+      }
+      return;
+    }
+    if (/^[1-9]$/.test(key)) {
+      e.preventDefault();
+      var sel = container.querySelector('.tr-speed-select');
+      var opt = sel && sel.options[Number(key) - 1];
+      if (opt) {
+        sel.value = opt.value;
+        timeEngine.setSpeed(parseFloat(opt.value));
+      }
+    }
+  });
+}
+
+/**
  * Default speed ladder: small multipliers for detailed inspection, then
  * time-compression presets (1s = 1min / 10min / 1h) for long tracks.
  */
@@ -128,7 +214,9 @@ export function createPlaybackControls(timeEngine, options) {
 
     onAdd: function (/*map*/) {
       var container = L.DomUtil.create('div', 'leaflet-trackreplay-controls');
-      return fillPlaybackControls(container, timeEngine, options);
+      fillPlaybackControls(container, timeEngine, options);
+      bindPlaybackKeys(container, timeEngine, options);
+      return container;
     },
   });
 

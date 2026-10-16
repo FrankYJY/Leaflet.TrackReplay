@@ -28,6 +28,10 @@
   where *every occurrence is a hit*: duplicates included, hit count badge,
   Enter / ◀ / ▶ cycles through them (wraparound), each jump opens that node's
   popup (cluster-aware); over the background nodes by default
+- ⌨️ **Focus-scoped keyboard** — shortcuts live on the controls themselves:
+  click the playback bar (or the search box) to arm its keys, with an outline
+  showing which control owns the keyboard; typing in any input is never
+  intercepted
 - 🏃 **Moving indicators** — animated markers with bearing-based rotation
 - 🛤️ **Dynamic route coloring** — traveled (red) / untraveled (blue) edge rendering
 - 👁️ **View following** — auto-pan to follow moving objects (latest/random/named/off)
@@ -148,6 +152,7 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `searchZoom` | `number` | — | `setView` zoom for each jump (omit to pan at the current zoom) |
 | `searchLabels` | `object` | English defaults | `{open, placeholder, prev, next}` |
 | `searchMessages` | `object` | English defaults | `{count, of, more, empty}` text builders |
+| `mapFocusSpace` | `boolean` | `true` | While the **map itself** is focused, Space toggles play/pause (nothing else is bound to the map) |
 | `showElementToggles` | `boolean` | `true` | Show the batch control (one tri-state checkbox per element type, across all objects) |
 | `elementTogglesPosition` | `string` | `'topright'` | Corner for the batch control |
 | `elementTogglesTitle` | `string` | `'Batch'` | Title of the batch control |
@@ -351,6 +356,21 @@ var idx = L.TrackReplay.Core.SearchIndex.createSearchIndex();
 idx.set([{ text: '基站 #24 在线设备 7', ref: { id: 24 } }, { text: '基站 #24 在线设备 7', ref: { id: 99 } }]);
 idx.search('基站 #24');   // → { total: 2, matches: [ … ] }  ← duplicates are separate hits
 ```
+
+### Keyboard (focus-scoped)
+
+There is **no global keyboard handler**. Shortcuts are scoped to the focused
+control: click it once and its keys become active (a focus outline shows
+which control owns the keyboard); click elsewhere and they stop. Text inputs
+always win — typing digits in the search box, the import textarea or the
+time editor never triggers playback actions.
+
+| Focus | Keys |
+|-------|------|
+| Playback bar | `Space` play/pause · `←`/`→` seek ∓5 s · `0` → 1× · `1-9` speed ladder · `r` stop |
+| Search control | `←`/`↑` previous hit · `→`/`↓` next hit (wraparound) · `Enter` next · `Esc` clear, again to collapse; inside the input, arrows move the caret and `Enter` still jumps |
+| Map (click it) | `Space` play/pause **only** — Leaflet's native arrow panning and `+`/`-` zoom stay untouched; `mapFocusSpace: false` binds nothing at all |
+| Any input / button | native behavior (typing, caret, activation) — nothing is intercepted |
 
 ### TimestampEdgeoJSON Format
 

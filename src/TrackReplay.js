@@ -177,6 +177,12 @@ function collectSearchRecords(allLayers, elementKeys) {
  * @param {Object} [options.searchLabels]   - UI strings ({ open, placeholder,
  *        prev, next })
  * @param {Object} [options.searchMessages] - texts ({ count, of, more, empty })
+ * @param {boolean} [options.mapFocusSpace=true] - while the MAP itself has
+ *        focus (clicking it focuses its container), Space toggles
+ *        play/pause. Nothing else is bound to the map, so its native
+ *        keyboard behavior (arrow panning, +/- zoom) stays intact; the
+ *        playback bar keeps the full shortcut set when IT is focused.
+ *        Set false to leave the map's keyboard completely untouched.
  * @returns {Object} internal handle
  */
 function buildReplay(map, featureCollection, options, initialCluster) {
@@ -816,6 +822,7 @@ export function trackReplay(map, dataOrArray, options) {
   var container = createDatasetContainer();
   var bus = createEventBus();
   var currentBuild = null;
+  var mapKeyHandler = null;
 
   /** Re-point the instance's live build fields at the current build. */
   function syncFields() {
@@ -1093,6 +1100,10 @@ export function trackReplay(map, dataOrArray, options) {
         map.removeControl(instance.searchControl);
       }
       instance.searchControl = null;
+      if (mapKeyHandler) {
+        L.DomEvent.off(map.getContainer(), 'keydown', mapKeyHandler);
+        mapKeyHandler = null;
+      }
       container.clear();
       syncFields();
       bus.clear();
@@ -1161,6 +1172,23 @@ export function trackReplay(map, dataOrArray, options) {
     bus.on('datasetadd', refreshSearch);
     bus.on('datasetremove', refreshSearch);
     bus.on('datasetsclear', refreshSearch);
+  }
+
+  // ---- Map-focused Space (mapFocusSpace, default on) ----
+  // Clicking the map focuses its container (Leaflet gives it tabindex="0");
+  // while that focus is held, Space toggles playback. Only Space — the map
+  // keeps its native arrow-panning and +/- zoom, and keys pressed in any
+  // control or input (events target deeper elements) are never touched.
+  if (options.mapFocusSpace !== false) {
+    mapKeyHandler = function (e) {
+      if (e.target !== map.getContainer()) { return; }
+      if (e.keyCode !== 32) { return; }
+      e.preventDefault();
+      if (e.repeat) { return; }
+      if (instance.getState() === 'playing') { instance.pause(); }
+      else { instance.play(); }
+    };
+    L.DomEvent.on(map.getContainer(), 'keydown', mapKeyHandler);
   }
 
   return instance;

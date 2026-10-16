@@ -150,6 +150,16 @@
   cursor: pointer;
 }
 
+/* ---- Focus-visible: which control owns the keyboard right now ----
+   Focus is the keyboard scope: clicking a control focuses it, its scoped
+   shortcuts become active, and the outline says so. */
+.leaflet-trackreplay-controlbar:focus,
+.leaflet-trackreplay-controls:focus,
+.leaflet-multisearch:focus {
+  outline: 2px solid rgba(51, 136, 255, 0.55);
+  outline-offset: 1px;
+}
+
 /* ---- View Follow Control ---- */
 .leaflet-trackreplay-viewfollow {
   background: #fff;

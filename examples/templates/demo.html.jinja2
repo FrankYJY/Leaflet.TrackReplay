@@ -119,7 +119,8 @@
   {% set ts_count = data.features | selectattr('properties.isTimestampedgeojson') | list | length %}
   {{ ts_count }} timestamped<br>
   Time range: {{ time_min }} – {{ time_max }}<br>
-  <small>Scroll to zoom • Drag to pan • Double-click time to edit</small>
+  <small>Scroll to zoom • Drag to pan • Double-click time to edit<br>
+  点击播放条或地图后可用键盘快捷键</small>
 </div>
 
 <!-- Leaflet JS (vendored locally — the page must not depend on CDNs) -->
@@ -699,57 +700,20 @@
   }
 
   // ===== Keyboard shortcuts =====
-  document.addEventListener('keydown', function (e) {
-    switch (e.key) {
-      case ' ':
-        e.preventDefault();
-        if (replay.getState() === 'playing') {
-          replay.pause();
-        } else {
-          replay.play();
-        }
-        break;
-      case 'ArrowLeft':
-        e.preventDefault();
-        replay.seek(replay.getCurrentTime() - 5000); // back 5s
-        break;
-      case 'ArrowRight':
-        e.preventDefault();
-        replay.seek(replay.getCurrentTime() + 5000); // forward 5s
-        break;
-      case 'r':
-      case 'R':
-        e.preventDefault();
-        replay.stop();
-        break;
-      case '0':
-        e.preventDefault();
-        replay.setSpeed(1);
-        console.log('Speed: 1×');
-        break;
-      default:
-        // 1-9: pick the Nth entry of the speed selector
-        // (0.25× … 8×, then time compression: 1s = 1min / 10min / 1h)
-        if (/^[1-9]$/.test(e.key)) {
-          e.preventDefault();
-          var select = document.querySelector('.tr-speed-select');
-          var opt = select && select.options[Number(e.key) - 1];
-          if (opt) {
-            select.value = opt.value;
-            replay.setSpeed(parseFloat(opt.value));
-            console.log('Speed: ' + opt.textContent);
-          }
-        }
-        break;
-    }
-  });
+  // The playback keys (Space / ←→ / 0-9 / r) are focus-scoped inside the
+  // plugin now: click the playback bar to arm them (the focused control gets
+  // an outline). One click on the map arms Space only. No global handler is
+  // installed here, so typing anywhere (search box, import panel, time
+  // editor) never triggers playback actions.
 
   console.log('Leaflet.TrackReplay demo ready!');
-  console.log('  Space = Play/Pause');
-  console.log('  ← →  = Seek ±5s');
-  console.log('  R     = Stop');
-  console.log('  1-9   = Speed (Nth option: 0.25× … 8×, 1s=1min, 1s=10min, 1s=1h)');
-  console.log('  0     = 1×');
+  console.log('  Click the playback bar, then:');
+  console.log('    Space = Play/Pause');
+  console.log('    ← →  = Seek ±5s');
+  console.log('    R     = Stop');
+  console.log('    1-9   = Speed (Nth option: 0.25× … 8×, 1s=1min, 1s=10min, 1s=1h)');
+  console.log('    0     = 1×');
+  console.log('  Or click the map: Space toggles play/pause.');
   console.log('  State:', replay.getState());
   console.log('  Legend:', replay.getLegend(10));
 </script>

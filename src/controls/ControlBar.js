@@ -6,7 +6,7 @@
  * can still be shown alone as its own control.
  */
 
-import { fillPlaybackControls } from './PlaybackControls.js';
+import { fillPlaybackControls, bindPlaybackKeys } from './PlaybackControls.js';
 import { fillTimelineControl } from './TimelineControl.js';
 
 /**
@@ -37,6 +37,9 @@ export function createControlBar(timeEngine, options) {
       // Bottom row: time display + progress slider
       var timeline = L.DomUtil.create('div', 'leaflet-trackreplay-timeline tr-bar-timeline', container);
       fillTimelineControl(timeline, timeEngine, options);
+
+      // Focus-scoped playback keys (Space/←→/0-9/r) on the whole box
+      bindPlaybackKeys(container, timeEngine, options);
 
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);
