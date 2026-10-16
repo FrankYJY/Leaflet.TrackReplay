@@ -58,7 +58,7 @@ out.entries = await page.evaluate(() => {
 
 // ---- 2. dots share the tracks' renderer (hit-testing prerequisite) ----
 out.renderer = await page.evaluate(() => {
-  const bgEl = replay.allLayers['background/基站'].elements.find((e) => e.key === 'background_nodes');
+  const bgEl = replay.allLayers['background/兴趣点'].elements.find((e) => e.key === 'background_nodes');
   let dot = null;
   bgEl.layer.eachLayer((l) => { if (!dot && l._map) { dot = l; } });
   let track = null;
@@ -76,7 +76,7 @@ out.renderer = await page.evaluate(() => {
 
 // ---- 3. click a real node dot -> its own popup must open ----
 const candidates = await page.evaluate(() => {
-  const bgEl = replay.allLayers['background/基站'].elements.find((e) => e.key === 'background_nodes');
+  const bgEl = replay.allLayers['background/兴趣点'].elements.find((e) => e.key === 'background_nodes');
   const list = [];
   bgEl.layer.eachLayer((l) => {
     if (l._map && l.getPopup() && list.length < 10) {
@@ -94,7 +94,7 @@ for (const c of candidates) {
     const el = document.querySelector('.leaflet-popup-content');
     return el ? el.innerText.replace(/\n/g, ' | ') : null;
   });
-  if (txt && txt.indexOf('基站') >= 0) {
+  if (txt && txt.indexOf('兴趣点') >= 0) {
     out.dotClick = { at: [c.x, c.y], opened: txt.slice(0, 40), matched: true };
     break;
   }
@@ -111,7 +111,7 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(1500);
 const bubble = await page.evaluate(() => {
-  const bgEl = replay.allLayers['background/基站'].elements.find((e) => e.key === 'background_nodes');
+  const bgEl = replay.allLayers['background/兴趣点'].elements.find((e) => e.key === 'background_nodes');
   const mgg = bgEl.layer;
   let parent = null;
   mgg.eachLayer((l) => {
@@ -166,7 +166,7 @@ out.columns = await page.evaluate(() => replay.infoLabels._columns.map((c) => c.
 
 const cellInfo = await page.evaluate(() => {
   const rows = replay.infoLabels._rows;
-  const rowIdx = rows.findIndex((r) => r.label.indexOf('基站') >= 0);
+  const rowIdx = rows.findIndex((r) => r.label.indexOf('兴趣点') >= 0);
   if (rowIdx < 0) { return { error: 'row not found' }; }
   const cell = rows[rowIdx].cells.background_nodes;
   if (!cell) { return { error: 'cell not found' }; }
@@ -197,7 +197,7 @@ await page.evaluate(() => { map.setView([39.90, 116.40], 16); });
 await page.waitForTimeout(2000);
 out.afterZoom = await page.evaluate(() => {
   const rows = replay.infoLabels._rows;
-  const rowIdx = rows.findIndex((r) => r.label.indexOf('基站') >= 0);
+  const rowIdx = rows.findIndex((r) => r.label.indexOf('兴趣点') >= 0);
   const cell = rows[rowIdx].cells.background_nodes;
   return {
     openPopups: document.querySelectorAll('.leaflet-popup').length,
@@ -233,9 +233,9 @@ out.control = await page.evaluate(() => {
   };
 });
 
-// open the 基站 labels cell first, so the switch's label-restore path is tested
+// open the 兴趣点 labels cell first, so the switch's label-restore path is tested
 const cellPos = await page.evaluate(() => ({
-  rowIdx: replay.infoLabels._rows.findIndex((r) => r.label.indexOf('基站') >= 0),
+  rowIdx: replay.infoLabels._rows.findIndex((r) => r.label.indexOf('兴趣点') >= 0),
   colIdx: replay.infoLabels._columns.findIndex((c) => c.key === 'background_nodes'),
 }));
 await clickCell(cellPos.rowIdx, cellPos.colIdx);
@@ -245,41 +245,41 @@ out.labelsBeforeSwitch = await page.locator('.leaflet-popup').count(); // scatte
 out.modeSwitch = await page.evaluate(() => {
   const get = (k) => replay.allLayers[k].elements.find((e) => e.key === 'background_nodes').layer;
   const oldSamples = get('background/采样点');
-  const oldStations = get('background/基站');
+  const oldPois = get('background/兴趣点');
   map.removeLayer(oldSamples); // hide one object only — must survive the switch
 
   const el = document.querySelector('.leaflet-trackreplay-clusterscatter');
   [...el.querySelectorAll('input[type=radio]')].find((r) => r.value === 'cluster').click();
 
   const newSamples = get('background/采样点');
-  const newStations = get('background/基站');
+  const newPois = get('background/兴趣点');
   let treeHits = 0;
   const walk = (list) => list.forEach((nd) => {
-    if (nd.layer === newSamples || nd.layer === newStations) { treeHits++; }
+    if (nd.layer === newSamples || nd.layer === newPois) { treeHits++; }
     if (nd.children) { walk(nd.children); }
   });
   if (replay.layerControl._trackReplayTree) { walk(replay.layerControl._trackReplayTree); }
   const row = replay.elementToggles._rows.find((r) => r.key === 'background_nodes');
 
   return {
-    swapped: newSamples !== oldSamples && newStations !== oldStations,
+    swapped: newSamples !== oldSamples && newPois !== oldPois,
     clusterMode: {
       samplesIsMCG: typeof newSamples.refreshClusters === 'function',
-      stationsIsMCG: typeof newStations.refreshClusters === 'function',
-      counts: [newSamples._backgroundNodeCount, newStations._backgroundNodeCount],
+      poisIsMCG: typeof newPois.refreshClusters === 'function',
+      counts: [newSamples._backgroundNodeCount, newPois._backgroundNodeCount],
     },
     visibilityPreserved: {
       hiddenStaysHidden: !map.hasLayer(newSamples),
-      visibleStaysVisible: map.hasLayer(newStations),
+      visibleStaysVisible: map.hasLayer(newPois),
     },
     treeRefsUpdated: treeHits,
-    toggleRowRefsUpdated: row.layers.filter((l) => l === newSamples || l === newStations).length,
+    toggleRowRefsUpdated: row.layers.filter((l) => l === newSamples || l === newPois).length,
   };
 });
 await page.waitForTimeout(1500);
 out.modeSwitchPopups = await page.evaluate(() => {
   const cell = replay.infoLabels._rows
-    .find((r) => r.label.indexOf('基站') >= 0).cells.background_nodes;
+    .find((r) => r.label.indexOf('兴趣点') >= 0).cells.background_nodes;
   return {
     openPopups: document.querySelectorAll('.leaflet-popup').length,
     onMapTargets: cell.targets.filter((t) => !!t.layer._map).length,
@@ -292,9 +292,9 @@ out.modeSwitchBack = await page.evaluate(() => {
   const el = document.querySelector('.leaflet-trackreplay-clusterscatter');
   [...el.querySelectorAll('input[type=radio]')].find((r) => r.value === 'scatter').click();
   const get = (k) => replay.allLayers[k].elements.find((e) => e.key === 'background_nodes').layer;
-  const stations = get('background/基站');
+  const pois = get('background/兴趣点');
   map.addLayer(get('background/采样点')); // restore for tidiness
-  return { stationsIsMCG: typeof stations.refreshClusters === 'function', stationsOnMap: map.hasLayer(stations) };
+  return { poisIsMCG: typeof pois.refreshClusters === 'function', poisOnMap: map.hasLayer(pois) };
 });
 await page.waitForTimeout(1500);
 out.labelsAfterSwitchBack = await page.locator('.leaflet-popup').count(); // scatter again: all 50
@@ -309,7 +309,7 @@ out.clusteredVariant = await page.evaluate(() => {
     showViewFollow: false, showElementToggles: false, showInfoLabels: false,
     backgroundNodesOptions: { cluster: true },
   });
-  const el = replay.allLayers['background/基站'].elements.find((e) => e.key === 'background_nodes');
+  const el = replay.allLayers['background/兴趣点'].elements.find((e) => e.key === 'background_nodes');
   const g = el.layer;
   return {
     isMCG: typeof g.refreshClusters === 'function',
@@ -324,12 +324,12 @@ out.clusteredVariant = await page.evaluate(() => {
   };
 });
 
-// make sure the station area is in view, then click one of the shown nodes
+// make sure the poi area is in view, then click one of the shown nodes
 phase = 'section 9';
 await page.evaluate(() => { map.setView([39.90, 116.40], 16); });
 await page.waitForTimeout(1500);
 const shownDots = await page.evaluate(() => {
-  const el = replay.allLayers['background/基站'].elements.find((e) => e.key === 'background_nodes');
+  const el = replay.allLayers['background/兴趣点'].elements.find((e) => e.key === 'background_nodes');
   const size = map.getSize();
   const list = [];
   el.layer.eachLayer((l) => {
@@ -350,7 +350,7 @@ for (const d of shownDots) {
     const el = document.querySelector('.leaflet-popup-content');
     return el ? el.innerText.replace(/\n/g, ' | ') : null;
   });
-  if (txt && txt.indexOf('基站') >= 0) {
+  if (txt && txt.indexOf('兴趣点') >= 0) {
     out.clusteredClick = { at: [d.x, d.y], opened: txt.slice(0, 40), matched: true };
     break;
   }

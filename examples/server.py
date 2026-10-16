@@ -252,8 +252,9 @@ def background_nodes() -> list:
         dx = bx + rng.gauss(0, 0.28)
         dy = by + rng.gauss(0, 0.28)
         coords.append([lng0 + dx / km_per_deg_lng, lat0 + dy / km_per_deg_lat])
-        popups.append(
-            f"<b>采样点 #{i}</b><br>RSSI: {rng.randint(-95, -60)} dBm")
+        value = round(rng.uniform(0, 100), 1)
+        level = "低" if value < 34 else ("中" if value < 67 else "高")
+        popups.append(f"<b>采样点 #{i}</b><br>数值: {value}<br>等级: {level}")
 
     samples = {
         "type": "Feature",
@@ -265,12 +266,12 @@ def background_nodes() -> list:
         },
     }
 
-    # ---- Form 2: 50 base stations, one Point feature each ----
-    stations = []
+    # ---- Form 2: 50 POIs, one Point feature each ----
+    pois = []
     for i in range(50):
         dx = rng.uniform(-1.9, 1.9)
         dy = rng.uniform(-1.9, 1.9)
-        stations.append({
+        pois.append({
             "type": "Feature",
             "geometry": {
                 "type": "Point",
@@ -278,14 +279,14 @@ def background_nodes() -> list:
                                 lat0 + dy / km_per_deg_lat],
             },
             "properties": {
-                "layerPath": ["background", "基站"],
+                "layerPath": ["background", "兴趣点"],
                 "element": "background_nodes",
-                "popup": f"<b>基站 #{i}</b><br>在线设备: {rng.randint(1, 30)}",
+                "popup": f"<b>兴趣点 #{i}</b><br>当日到访: {rng.randint(1, 30)}",
                 "style": {"fillColor": "#e67e22", "radius": 5},
             },
         })
 
-    return [samples] + stations
+    return [samples] + pois
 
 
 def haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -374,16 +375,6 @@ async def demo_page(request: Request):
         context={
             "data_json": data_json,
             "data": data,
-            "time_min": min(
-                f["properties"]["times"][0]
-                for f in data["features"]
-                if f["properties"].get("isTimestampedgeojson")
-            ),
-            "time_max": max(
-                f["properties"]["times"][-1]
-                for f in data["features"]
-                if f["properties"].get("isTimestampedgeojson")
-            ),
         },
     )
 

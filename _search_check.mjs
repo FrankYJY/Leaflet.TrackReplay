@@ -143,11 +143,11 @@ await input.fill('gps');
 await page.waitForTimeout(300);
 out.lowercase = await state();
 
-// ---- 5. big match set: 50 stations ----
-phase = 'stations';
-await input.fill('基站');
+// ---- 5. big match set: 50 pois ----
+phase = 'pois';
+await input.fill('兴趣点');
 await page.waitForTimeout(400);
-out.stations = await state();
+out.pois = await state();
 
 // ---- 6. no match ----
 phase = 'no match';
@@ -184,7 +184,7 @@ await page.evaluate(() => {
 await page.waitForTimeout(1000);
 await page.evaluate(() => replay.clearDatasets());
 await page.waitForTimeout(600);
-await input.fill('基站');
+await input.fill('兴趣点');
 await page.waitForTimeout(300);
 out.afterClear = await state();
 

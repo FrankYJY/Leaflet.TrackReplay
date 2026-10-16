@@ -102,8 +102,8 @@ out.before = await page.evaluate(() => {
   // hide the 'events' element type for every object
   var row = replay.elementToggles._rows.find(function (r) { return r.key === 'events'; });
   replay.elementToggles._setAll(row, false);
-  // check the 基站 batch-label cell
-  var rowIdx = replay.infoLabels._rows.findIndex(function (r) { return r.label.indexOf('基站') >= 0; });
+  // check the 兴趣点 batch-label cell
+  var rowIdx = replay.infoLabels._rows.findIndex(function (r) { return r.label.indexOf('兴趣点') >= 0; });
   var colIdx = replay.infoLabels._columns.findIndex(function (c) { return c.key === 'background_nodes'; });
   var tr = document.querySelectorAll('.leaflet-trackreplay-infolabels .tr-il-row')[rowIdx];
   tr.querySelectorAll('td.tr-il-cell')[colIdx].querySelector('input').click();
@@ -146,14 +146,14 @@ out.afterAdd = await page.evaluate(() => {
       .filter(function (e) { return e.key === 'events'; })
       .every(function (e) { return !replay.map.hasLayer(e.layer); }),
     labelCellChecked: replay.infoLabels.getCheckedCells()
-      .some(function (c) { return c.rowKey === 'background/基站' && c.elementKey === 'background_nodes'; }),
+      .some(function (c) { return c.rowKey === 'background/兴趣点' && c.elementKey === 'background_nodes'; }),
     followMode: replay.viewFollow.getMode().mode,
     clusterRadio: (function () {
       var cs = document.querySelector('.leaflet-trackreplay-clusterscatter');
       var r = [].slice.call(cs.querySelectorAll('input[type=radio]')).filter(function (x) { return x.checked; })[0];
       return r ? r.value : null;
     })(),
-    bgIsClusterGroup: typeof replay.allLayers['background/基站'].elements
+    bgIsClusterGroup: typeof replay.allLayers['background/兴趣点'].elements
       .find(function (e) { return e.key === 'background_nodes'; }).layer.refreshClusters === 'function',
     panelsPersist: !replay.elementToggles.isCollapsed() &&
       !replay.clusterScatterControl.isCollapsed() &&
@@ -190,7 +190,7 @@ out.afterRemove = await page.evaluate(() => {
       .filter(function (e) { return e.key === 'events'; })
       .every(function (e) { return !replay.map.hasLayer(e.layer); }),
     labelCellChecked: replay.infoLabels.getCheckedCells()
-      .some(function (c) { return c.rowKey === 'background/基站'; }),
+      .some(function (c) { return c.rowKey === 'background/兴趣点'; }),
     event: window.__dsEvents.filter(function (e) { return e.evt === 'datasetremove'; }).pop(),
   };
 });

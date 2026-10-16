@@ -111,9 +111,9 @@ var EXAMPLE_NODES = {
     coordinates: [[116.401, 39.901], [116.407, 39.907]],
   },
   properties: {
-    layerPath: ['background', 'stations'],
+    layerPath: ['background', 'pois'],
     element: 'background_nodes',
-    popups: ['station 1', 'station 2'],
+    popups: ['POI 1', 'POI 2'],
   },
 };
 
@@ -225,7 +225,7 @@ var PY_NODES = [
   '    props = {',
   '        "layerPath": list(layer_path),',
   '        "element": "background_nodes",',
-  '        "popups": popups or [f"station {i + 1}" for i in range(len(points))],',
+  '        "popups": popups or [f"POI {i + 1}" for i in range(len(points))],',
   '    }',
   '    if style:',
   '        props["style"] = style',
@@ -396,7 +396,7 @@ var DEFAULT_MESSAGES = {
         example: prettyExample(EXAMPLE_NODES),
         python: pySnippet(PY_NODES, PY_IMPORTS_BASIC, [
           'features = nodes([(116.401, 39.901), (116.407, 39.907)],',
-          '                 layer_path=["background", "stations"])',
+          '                 layer_path=["background", "pois"])',
         ].join('\n')),
       },
       {
@@ -430,13 +430,13 @@ var DEFAULT_MESSAGES = {
             '             (1783014090000, 116.410, 39.905),',
             '             (1783014190000, 116.420, 39.910)]',
             'event_pts = [(116.404, 39.904)]',
-            'station_pts = [(116.401, 39.901), (116.407, 39.907)]',
+            'poi_pts = [(116.401, 39.901), (116.407, 39.907)]',
             'rings = [[(116.390, 39.890), (116.420, 39.890),',
             '          (116.420, 39.920), (116.390, 39.920)]]',
             '',
             'features = (tracks([point_seq], ["demo", "track"], names=["track"])',
             '            + events(event_pts, ["demo", "track"], popups=["<b>U-turn</b>"])',
-            '            + nodes(station_pts, ["background", "stations"])',
+            '            + nodes(poi_pts, ["background", "pois"])',
             '            + areas(rings, ["zones", "area"], popups=["Study area"]))',
           ].join('\n'),
           '{"type": "FeatureCollection", "features": features}'),

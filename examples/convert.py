@@ -19,7 +19,7 @@ popups are computed for you.
             ),
             event([116.410, 39.905], layer_path=["visitor", "Bee"], popup="掉头"),
             background_nodes([(116.40, 39.90), (116.41, 39.91)],
-                             layer_path=["background", "stations"]),
+                             layer_path=["background", "pois"]),
             area([(116.39, 39.89), (116.42, 39.89), (116.42, 39.92)],
                  layer_path=["zones", "study"], popup="研究区"),
         ],
@@ -183,7 +183,7 @@ def event(coord, layer_path, popup=None, style=None):
 
 
 def background_nodes(coords, layer_path, popups=None, style=None):
-    """Many time-independent points (stations, samples, …) as one MultiPoint."""
+    """Many time-independent points (pois, samples, …) as one MultiPoint."""
     props = {"layerPath": list(layer_path), "element": "background_nodes"}
     if popups is not None:
         props["popups"] = list(popups)          # length must equal the points
@@ -251,7 +251,7 @@ def _sample_collection():
             lat0 + r_deg * math.sin(angle),
         ))
 
-    stations = [
+    pois = [
         (lng0 + 0.003 * math.cos(a), lat0 + 0.003 * math.sin(a))
         for a in (0.6, 1.2, 1.8, 2.4)
     ]
@@ -262,8 +262,8 @@ def _sample_collection():
                   point_popups=True),
             event(points[len(points) // 2][1:], layer_path=["示例", "步行"],
                   popup="<b>中途事件</b><br>轨迹中点"),
-            background_nodes(stations, layer_path=["背景", "基站"],
-                             popups=["基站 %d" % (i + 1) for i in range(len(stations))]),
+            background_nodes(pois, layer_path=["背景", "兴趣点"],
+                             popups=["兴趣点 %d" % (i + 1) for i in range(len(pois))]),
             area([(lng0 - 0.006, lat0 - 0.006), (lng0 + 0.008, lat0 - 0.006),
                   (lng0 + 0.008, lat0 + 0.008), (lng0 - 0.006, lat0 + 0.008)],
                  layer_path=["区域", "研究区"], popup="研究区域",

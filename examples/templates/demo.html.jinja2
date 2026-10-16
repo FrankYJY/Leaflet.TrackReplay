@@ -27,25 +27,6 @@
     html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     #map { height: 100%; width: 100%; }
 
-    /* Info overlay — top-center so it doesn't cover the legend (bottom-right)
-       or the playback controls (top-left / top-right) */
-    .demo-info {
-      position: absolute;
-      top: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(255,255,255,0.92);
-      padding: 10px 14px;
-      border-radius: 6px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      font-size: 12px;
-      color: #555;
-      z-index: 1000;
-      pointer-events: none;
-      text-align: center;
-    }
-    .demo-info strong { color: #333; }
-
     /* ---- Settings control + modal panel (demo host UI, not plugin code) ---- */
     .demo-settings-gear { font-size: 15px; }
     .demo-settings-overlay {
@@ -133,16 +114,6 @@
 
 <div id="map"></div>
 
-<div class="demo-info">
-  <strong>Leaflet.TrackReplay</strong> — Demo<br>
-  Data: {{ data.features | length }} features,
-  {% set ts_count = data.features | selectattr('properties.isTimestampedgeojson') | list | length %}
-  {{ ts_count }} timestamped<br>
-  Time range: {{ time_min }} – {{ time_max }}<br>
-  <small>Scroll to zoom • Drag to pan • Double-click time to edit<br>
-  点击播放条或地图后可用键盘快捷键</small>
-</div>
-
 <!-- Leaflet JS (vendored locally — the page must not depend on CDNs) -->
 <script src="/vendor/leaflet.js"></script>
 
@@ -226,7 +197,7 @@
     '    props = {',
     '        "layerPath": list(layer_path),',
     '        "element": "background_nodes",',
-    '        "popups": popups or [f"基站 {i + 1}" for i in range(len(points))],',
+    '        "popups": popups or [f"兴趣点 {i + 1}" for i in range(len(points))],',
     '    }',
     '    if style:',
     '        props["style"] = style',
@@ -706,9 +677,9 @@
               coordinates: [[116.401, 39.901], [116.407, 39.907]],
             },
             properties: {
-              layerPath: ['背景', '基站'],
+              layerPath: ['背景', '兴趣点'],
               element: 'background_nodes',
-              popups: ['基站 1', '基站 2'],
+              popups: ['兴趣点 1', '兴趣点 2'],
             },
           };
           var staticArea = {
@@ -766,7 +737,7 @@
               example: pretty(bgNodes),
               python: pySnippet(PY_NODES_ZH, PY_IMPORTS_BASIC, [
                 'features = nodes([(116.401, 39.901), (116.407, 39.907)],',
-                '                 layer_path=["背景", "基站"])',
+                '                 layer_path=["背景", "兴趣点"])',
               ].join('\n')),
             },
             {
@@ -803,13 +774,13 @@
                   '             (1783014090000, 116.410, 39.905),',
                   '             (1783014190000, 116.420, 39.910)]',
                   'event_pts = [(116.404, 39.904)]',
-                  'station_pts = [(116.401, 39.901), (116.407, 39.907)]',
+                  'poi_pts = [(116.401, 39.901), (116.407, 39.907)]',
                   'rings = [[(116.390, 39.890), (116.420, 39.890),',
                   '          (116.420, 39.920), (116.390, 39.920)]]',
                   '',
                   'features = (tracks([point_seq], ["示例", "轨迹"], names=["轨迹"])',
                   '            + events(event_pts, ["示例", "轨迹"], popups=["<b>掉头事件</b>"])',
-                  '            + nodes(station_pts, ["背景", "基站"])',
+                  '            + nodes(poi_pts, ["背景", "兴趣点"])',
                   '            + areas(rings, ["区域", "研究区"], popups=["研究区域"]))',
                 ].join('\n'),
                 '{"type": "FeatureCollection", "features": features}'),
@@ -967,7 +938,7 @@
   scheduleHolidays(0);
 
   // ===== 节假日数据（chinese-days 年度 JSON）=====
-  // 每台设备各自抓一次、按年缓存；抓不到就只是不显示节日，回放不受影响。
+  // 每台电脑的浏览器各自抓一次、按年缓存；抓不到就只是不显示节日，回放不受影响。
   // 数据源：https://cdn.jsdelivr.net/npm/chinese-days/dist/years/{年}.json
   //   { "holidays": {"2026-01-01": "New Year's Day,元旦,1"}, "workdays": {...} }
   // —— 结构与插件要的两桶完全一致，值原样显示（不转化）。
@@ -1259,7 +1230,7 @@
       '显示时区决定时间轴怎么读：时间标签、双击编辑、进度条上的<b>日界线</b>、' +
       '以及节假日按哪一天查表，全部跟着它走（默认跟随浏览器）。<br>' +
       '节假日数据来自 chinese-days 的年度 JSON（结构与插件一致，值原样显示）；' +
-      '每台设备各自按年缓存在 localStorage，抓不到时只是不显示节日，不影响回放。';
+      '每台电脑的浏览器各自按年缓存在 localStorage，抓不到时只是不显示节日，不影响回放。';
   }
 
   function settingsSection(panel, title) {

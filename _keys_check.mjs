@@ -108,7 +108,7 @@ await page.waitForTimeout(300);
 // ---- 3. search control focused: arrows cycle hits ----
 phase = 'search focus';
 await page.locator('.leaflet-multisearch .lms-toggle').click();
-await page.locator('.leaflet-multisearch .lms-input').fill('基站');
+await page.locator('.leaflet-multisearch .lms-input').fill('兴趣点');
 await page.waitForTimeout(300);
 out.searchTyped = await page.evaluate(() =>
   document.querySelector('.leaflet-multisearch .lms-count').textContent);
