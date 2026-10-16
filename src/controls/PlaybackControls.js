@@ -8,6 +8,19 @@
 import { formatSpeedLabel } from '../utils/TimeUtils.js';
 
 /**
+ * Tooltip texts. The key suffixes (Space / R / 0-9) are appended
+ * automatically — hosts localize the words, never the keys.
+ */
+var DEFAULT_LABELS = {
+  stop: 'Stop',
+  play: 'Play',
+  pause: 'Pause',
+  speed: 'Speed',
+  loop: 'Loop',
+  hint: 'Focus this bar to use the keyboard: Space play/pause · ←/→ ±5s · 0-9 speed · R stop',
+};
+
+/**
  * True for events originating in form controls — there the keyboard keeps
  * its native meaning (typing, native button activation, caret movement).
  */
@@ -38,7 +51,12 @@ function isFormTarget(el) {
  */
 export function bindPlaybackKeys(container, timeEngine, options) {
   options = options || {};
+  var labels = L.extend({}, DEFAULT_LABELS, options.labels || {});
   container.tabIndex = 0;
+
+  // Hovering anywhere on the bar shows the whole key set (the per-button
+  // titles above carry their own key).
+  container.title = labels.hint;
 
   container.addEventListener('keydown', function (e) {
     if (isFormTarget(e.target)) { return; }
@@ -114,13 +132,15 @@ var DEFAULT_SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8, 60, 600, 3600];
  */
 export function fillPlaybackControls(container, timeEngine, options) {
   options = options || {};
+  var labels = L.extend({}, DEFAULT_LABELS, options.labels || {});
   var speedOptions = options.speedOptions || DEFAULT_SPEED_OPTIONS;
   var labelFor = options.speedLabel || formatSpeedLabel;
   var showLoop = options.showLoop !== false;
 
   // Stop button
   var stopBtn = L.DomUtil.create('button', 'tr-btn tr-btn-stop', container);
-  stopBtn.title = 'Stop';
+  stopBtn.title = labels.stop + ' (R)';
+  stopBtn.setAttribute('aria-keyshortcuts', 'R');
   stopBtn.innerHTML = '⏹';
   stopBtn.onclick = function (e) {
     e.preventDefault();
@@ -129,7 +149,8 @@ export function fillPlaybackControls(container, timeEngine, options) {
 
   // Play/Pause button
   var playBtn = L.DomUtil.create('button', 'tr-btn tr-btn-play', container);
-  playBtn.title = 'Play / Pause';
+  playBtn.title = labels.play + ' (Space)';
+  playBtn.setAttribute('aria-keyshortcuts', 'Space');
   playBtn.innerHTML = '▶';
   playBtn.onclick = function (e) {
     e.preventDefault();
@@ -143,9 +164,11 @@ export function fillPlaybackControls(container, timeEngine, options) {
 
   // Speed selector
   var speedLabel = L.DomUtil.create('span', 'tr-speed-label', container);
-  speedLabel.textContent = 'Speed: ';
+  speedLabel.textContent = labels.speed + ': ';
 
   var speedSelect = L.DomUtil.create('select', 'tr-speed-select', container);
+  speedSelect.title = labels.speed + ' (0-9)';
+  speedSelect.setAttribute('aria-keyshortcuts', '0 1 2 3 4 5 6 7 8 9');
   for (var i = 0; i < speedOptions.length; i++) {
     var opt = L.DomUtil.create('option', '', speedSelect);
     opt.value = speedOptions[i];
@@ -163,29 +186,30 @@ export function fillPlaybackControls(container, timeEngine, options) {
     var loopLabel = L.DomUtil.create('label', 'tr-loop-label', container);
     var loopCheck = L.DomUtil.create('input', 'tr-loop-check', loopLabel);
     loopCheck.type = 'checkbox';
+    loopCheck.title = labels.loop;
     loopCheck.checked = timeEngine.getLoop();
     loopCheck.onchange = function () {
       timeEngine.setLoop(loopCheck.checked);
     };
-    loopLabel.appendChild(document.createTextNode(' Loop'));
+    loopLabel.appendChild(document.createTextNode(' ' + labels.loop));
   }
 
   // Listen to engine state changes to update UI
   timeEngine.on('start', function () {
     playBtn.innerHTML = '⏸';
-    playBtn.title = 'Pause';
+    playBtn.title = labels.pause + ' (Space)';
   });
   timeEngine.on('pause', function () {
     playBtn.innerHTML = '▶';
-    playBtn.title = 'Play';
+    playBtn.title = labels.play + ' (Space)';
   });
   timeEngine.on('stop', function () {
     playBtn.innerHTML = '▶';
-    playBtn.title = 'Play';
+    playBtn.title = labels.play + ' (Space)';
   });
   timeEngine.on('finished', function () {
     playBtn.innerHTML = '▶';
-    playBtn.title = 'Play';
+    playBtn.title = labels.play + ' (Space)';
   });
 
   L.DomEvent.disableClickPropagation(container);

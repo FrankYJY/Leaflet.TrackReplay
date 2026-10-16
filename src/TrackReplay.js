@@ -103,6 +103,10 @@ function collectSearchRecords(allLayers, elementKeys) {
  *        [0.25, 0.5, 1, 2, 4, 8, 60, 600, 3600] (≥60× is labelled as time
  *        compression, e.g. "1s = 1min")
  * @param {Function} [options.speedLabel]           - fn(speed) => display label
+ * @param {Object} [options.playbackLabels]         - playback tooltips
+ *        ({ stop, play, pause, speed, loop, hint }); the key names
+ *        (Space / R / 0-9) are appended automatically, and the buttons
+ *        carry aria-keyshortcuts
  * @param {number} [options.minTickMs=16]           - tick interval floor, keeps
  *        high speeds from flooding the tick loop
  * @param {boolean} [options.loop=false]            - auto-restart when finished
@@ -677,6 +681,7 @@ function buildReplay(map, featureCollection, options, initialCluster) {
       speedOptions: options.speedOptions,
       speedLabel: options.speedLabel,
       showLoop: options.showLoop,
+      labels: options.playbackLabels,
     });
     map.addControl(controlBar);
   } else if (showControls) {
@@ -684,6 +689,7 @@ function buildReplay(map, featureCollection, options, initialCluster) {
       speedOptions: options.speedOptions,
       speedLabel: options.speedLabel,
       showLoop: options.showLoop,
+      labels: options.playbackLabels,
     });
     map.addControl(controls);
   } else if (showTimeline) {

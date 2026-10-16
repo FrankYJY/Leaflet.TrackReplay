@@ -120,6 +120,7 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `speed` | `number` | `1` | Initial playback speed multiplier |
 | `speedOptions` | `number[]` | `[0.25, 0.5, 1, 2, 4, 8, 60, 600, 3600]` | Speed ladder shown in the selector |
 | `speedLabel` | `(speed) => string` | — | Custom label formatter for the ladder |
+| `playbackLabels` | `object` | English defaults | Playback tooltips `{stop, play, pause, speed, loop, hint}`; the key names (Space / R / 0-9) are appended automatically |
 | `loop` | `boolean` | `false` | Auto-restart when finished |
 | `tickLen` | `number` | `250` | Tick interval in ms |
 | `minTickMs` | `number` | `16` | Tick interval floor — keeps high speeds from flooding the tick loop |
@@ -153,7 +154,7 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `searchPosition` | `string` | `'topleft'` | Corner of the search control |
 | `searchElements` | `string[]` | `['background_nodes']` | Element types included in the search index |
 | `searchZoom` | `number` | — | `setView` zoom for each jump (omit to pan at the current zoom) |
-| `searchLabels` | `object` | English defaults | `{open, placeholder, prev, next}` |
+| `searchLabels` | `object` | English defaults | `{open, close, placeholder, prev, next, inputHint, keyboardHint}` |
 | `searchMessages` | `object` | English defaults | `{count, of, more, empty}` text builders |
 | `mapFocusSpace` | `boolean` | `true` | While the **map itself** is focused, Space toggles play/pause (nothing else is bound to the map) |
 | `showElementToggles` | `boolean` | `true` | Show the batch control (one tri-state checkbox per element type, across all objects) |
@@ -375,6 +376,10 @@ time editor never triggers playback actions.
 | Search control | `←`/`↑` previous hit · `→`/`↓` next hit (wraparound) · `Enter` next · `Esc` clear, again to collapse; inside the input, arrows move the caret and `Enter` still jumps |
 | Map (click it) | `Space` play/pause **only** — Leaflet's native arrow panning and `+`/`-` zoom stay untouched; `mapFocusSpace: false` binds nothing at all |
 | Any input / button | native behavior (typing, caret, activation) — nothing is intercepted |
+
+Every key is discoverable **in place**: buttons carry it in their tooltip
+(`播放 (Space)`) and in `aria-keyshortcuts`; hovering anywhere on the playback
+bar (or the search box) shows the full key list for that control.
 
 ### TimestampEdgeoJSON Format
 

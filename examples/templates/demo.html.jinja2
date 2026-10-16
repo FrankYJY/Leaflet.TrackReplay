@@ -485,12 +485,24 @@
         placeholder: '搜索背景节点…',
         prev: '上一个',
         next: '下一个',
+        inputHint: 'Enter 下一个命中 · Esc 清空（再按收起）',
+        keyboardHint: '聚焦后：←↑ 上一个 · →↓ 下一个 · Enter 下一个 · Esc 清空/收起',
       },
       searchMessages: {
         count: function (n) { return n + ' 处'; },
         of: function (i, n) { return i + '/' + n; },
         more: function (shown, total) { return '… 显示前 ' + shown + ' 条，共 ' + total + ' 处'; },
         empty: function () { return '无匹配'; },
+      },
+      // Playback tooltips (the key names Space / R / 0-9 are appended
+      // automatically and exposed via aria-keyshortcuts)
+      playbackLabels: {
+        stop: '停止',
+        play: '播放',
+        pause: '暂停',
+        speed: '播放速度',
+        loop: '循环播放',
+        hint: '点击后键盘可用：Space 播放/暂停 · ←/→ 快退/快进 5 秒 · 0-9 速度档位 · R 停止',
       },
       dataSourceSamples: [
         { label: '示例轨迹', data: function () {

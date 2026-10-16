@@ -206,6 +206,40 @@ out.loopSpace = {
   stateUnchanged: (await snap()).state === stateBeforeSpace,
 };
 
+// ---- 7b. tooltips carry the key names; aria-keyshortcuts present ----
+phase = 'tooltips';
+out.tooltips = await page.evaluate(() => {
+  var play = document.querySelector('.tr-btn-play');
+  var stop = document.querySelector('.tr-btn-stop');
+  var speed = document.querySelector('.tr-speed-select');
+  var bar = document.querySelector('.leaflet-trackreplay-controlbar');
+  var sPrev = document.querySelector('.leaflet-multisearch .lms-prev');
+  var sNext = document.querySelector('.leaflet-multisearch .lms-next');
+  var sInput = document.querySelector('.leaflet-multisearch .lms-input');
+  var sBox = document.querySelector('.leaflet-multisearch');
+  return {
+    play: play.title, stop: stop.title, speed: speed.title,
+    barHint: bar.title,
+    playAria: play.getAttribute('aria-keyshortcuts'),
+    stopAria: stop.getAttribute('aria-keyshortcuts'),
+    searchPrev: sPrev.title, searchNext: sNext.title,
+    searchInputHint: sInput.title, searchBoxHint: sBox.title,
+    searchPrevAria: sPrev.getAttribute('aria-keyshortcuts'),
+  };
+});
+out.tooltipsOk =
+  out.tooltips.play.indexOf('(Space)') >= 0 &&
+  out.tooltips.stop.indexOf('(R)') >= 0 &&
+  out.tooltips.speed.indexOf('(0-9)') >= 0 &&
+  out.tooltips.barHint.indexOf('Space') >= 0 &&
+  out.tooltips.playAria === 'Space' &&
+  out.tooltips.stopAria === 'R' &&
+  out.tooltips.searchPrev.indexOf('(←/↑)') >= 0 &&
+  out.tooltips.searchNext.indexOf('(→/↓)') >= 0 &&
+  out.tooltips.searchInputHint.indexOf('Enter') >= 0 &&
+  out.tooltips.searchBoxHint.indexOf('Enter') >= 0 &&
+  out.tooltips.searchPrevAria === 'ArrowLeft ArrowUp';
+
 // ---- 8. mapFocusSpace: false -> map keyboard untouched ----
 phase = 'option off';
 await page.evaluate(() => {

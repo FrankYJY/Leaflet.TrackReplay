@@ -27,6 +27,8 @@ var DEFAULT_LABELS = {
   placeholder: 'Search…',
   prev: 'Previous',
   next: 'Next',
+  inputHint: 'Enter: next hit · Esc: clear, again to collapse',
+  keyboardHint: 'Focused: ←/↑ previous · →/↓ next · Enter next · Esc clear/collapse',
 };
 
 var DEFAULT_MESSAGES = {
@@ -109,6 +111,7 @@ export function createSearchControl(options) {
       this._flashMarker = null;
 
       var container = L.DomUtil.create('div', 'leaflet-multisearch');
+      container.title = labels.keyboardHint; // whole-box hover shows the keys
       this._container = container;
 
       // The 🔍 button doubles as the control's header (like the other
@@ -127,7 +130,8 @@ export function createSearchControl(options) {
 
       var prevBtn = L.DomUtil.create('button', 'lms-nav lms-prev', row);
       prevBtn.type = 'button';
-      prevBtn.title = labels.prev;
+      prevBtn.title = labels.prev + ' (←/↑)';
+      prevBtn.setAttribute('aria-keyshortcuts', 'ArrowLeft ArrowUp');
       prevBtn.textContent = '◀';
       prevBtn.onclick = function () { self._step(-1); };
       this._prevBtn = prevBtn;
@@ -135,6 +139,8 @@ export function createSearchControl(options) {
       var input = L.DomUtil.create('input', 'lms-input', row);
       input.type = 'text';
       input.placeholder = labels.placeholder;
+      input.title = labels.inputHint;
+      input.setAttribute('aria-keyshortcuts', 'Enter Escape');
       input.oninput = function () { self._search(input.value); };
       input.onkeydown = function (e) {
         if (e.keyCode === 13) { // Enter
@@ -154,7 +160,8 @@ export function createSearchControl(options) {
 
       var nextBtn = L.DomUtil.create('button', 'lms-nav lms-next', row);
       nextBtn.type = 'button';
-      nextBtn.title = labels.next;
+      nextBtn.title = labels.next + ' (→/↓)';
+      nextBtn.setAttribute('aria-keyshortcuts', 'ArrowRight ArrowDown');
       nextBtn.textContent = '▶';
       nextBtn.onclick = function () { self._step(1); };
       this._nextBtn = nextBtn;
