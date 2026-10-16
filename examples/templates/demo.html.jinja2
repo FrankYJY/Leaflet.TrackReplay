@@ -5,24 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Leaflet.TrackReplay — Demo</title>
 
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-        crossorigin="" />
+  <!-- Leaflet CSS (vendored locally — the page must not depend on CDNs) -->
+  <link rel="stylesheet" href="/vendor/leaflet.css" />
 
   <!-- MarkerCluster CSS (optional, for point clustering) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="/vendor/MarkerCluster.css" />
+  <link rel="stylesheet" href="/vendor/MarkerCluster.Default.css" />
 
   <!-- Hierarchical layer control CSS (optional, gives a tree layer control) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.control.layers.tree@1.2.0/L.Control.Layers.Tree.css"
-        integrity="sha256-7KwgTdifb/uQQfwmSTfAD/bGoyyVLJMLXuDxZAIlgfQ=" crossorigin="" />
+  <link rel="stylesheet" href="/vendor/L.Control.Layers.Tree.css" />
 
   <!-- Fullscreen + measure tool CSS (optional helpers) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-fullscreen@1.0.2/dist/leaflet.fullscreen.css"
-        integrity="sha256-YTbhDGEH5amI/JfotPMN7IByFpsN9e4tCBnv5oNdvHU=" crossorigin="" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.css"
-        integrity="sha256-vy42LTyS2HK4KRRV/DawoHpUYASRdyQIxQwbPwAl7L8=" crossorigin="" />
+  <link rel="stylesheet" href="/vendor/leaflet.fullscreen.css" />
+  <link rel="stylesheet" href="/vendor/leaflet-measure.css" />
 
   <!-- Plugin CSS (local build) -->
   <link rel="stylesheet" href="/dist/leaflet-trackreplay.css" />
@@ -127,23 +122,18 @@
   <small>Scroll to zoom • Drag to pan • Double-click time to edit</small>
 </div>
 
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-        crossorigin=""></script>
+<!-- Leaflet JS (vendored locally — the page must not depend on CDNs) -->
+<script src="/vendor/leaflet.js"></script>
 
 <!-- MarkerCluster JS (optional) -->
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="/vendor/leaflet.markercluster.js"></script>
 
 <!-- Hierarchical layer control JS (optional, used by the plugin when present) -->
-<script src="https://unpkg.com/leaflet.control.layers.tree@1.2.0/L.Control.Layers.Tree.js"
-        integrity="sha256-OnhoT4cKoWHZKx9bHteTKUqkhsC2tHhXKJeQAukhOPc=" crossorigin=""></script>
+<script src="/vendor/L.Control.Layers.Tree.js"></script>
 
 <!-- Fullscreen + measure tool JS (optional helpers; the measure bundle is the Chinese locale) -->
-<script src="https://unpkg.com/leaflet-fullscreen@1.0.2/dist/Leaflet.fullscreen.js"
-        integrity="sha256-/VGiFGzaidNadoKY4/8zFXP/OqGdajjpB+0vNHRz33o=" crossorigin=""></script>
-<script src="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.cn.js"
-        integrity="sha256-5VByb5IhxzldYKhnGqxAOq02Zb4Ywg6xfZ3ZGmFUSZA=" crossorigin=""></script>
+<script src="/vendor/Leaflet.fullscreen.js"></script>
+<script src="/vendor/leaflet-measure.cn.js"></script>
 
 <!-- Plugin JS (local build) -->
 <script src="/dist/leaflet-trackreplay.umd.js"></script>

@@ -611,6 +611,10 @@ python server.py
 # Open http://localhost:8000
 ```
 
+The demo page loads Leaflet and its helper plugins from `examples/vendor/`
+(committed with the repo) — **no external CDN is needed**; only basemap tiles
+require network access.
+
 ## Project Structure
 
 ```

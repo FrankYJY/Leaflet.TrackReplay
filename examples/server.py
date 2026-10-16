@@ -34,6 +34,12 @@ DIST_DIR = BASE_DIR / "dist"
 if DIST_DIR.exists():
     app.mount("/dist", StaticFiles(directory=str(DIST_DIR)), name="dist")
 
+# Mount the vendored front-end dependencies (Leaflet + plugins) so the demo
+# page never depends on external CDNs, which can hang on flaky networks
+VENDOR_DIR = Path(__file__).resolve().parent / "vendor"
+if VENDOR_DIR.exists():
+    app.mount("/vendor", StaticFiles(directory=str(VENDOR_DIR)), name="vendor")
+
 # ---- Templates ----
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -45,7 +51,8 @@ async def no_cache_built_assets(request: Request, call_next):
     rendered page, so a rebuild / template change is picked up on a normal
     reload (avoids new JS + stale CSS, or a stale HTML page)."""
     response = await call_next(request)
-    if request.url.path.startswith("/dist") or request.url.path == "/":
+    if (request.url.path.startswith("/dist") or request.url.path.startswith("/vendor")
+            or request.url.path == "/"):
         response.headers["Cache-Control"] = "no-store"
     return response
 
