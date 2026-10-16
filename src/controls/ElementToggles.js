@@ -70,11 +70,12 @@ export function createElementToggles(allLayers, options) {
       var title = L.DomUtil.create('div', 'tr-et-title', container);
       title.textContent = options.title || 'Batch';
 
-      // The title doubles as the fold header (like the labels/search panels);
-      // the body starts expanded.
+      // The title doubles as the fold header; collapsed by default
+      // (`options.expanded: true` starts it open).
+      this._container = container;
       var body = L.DomUtil.create('div', 'tr-et-body', container);
       this._bodyEl = body;
-      this._collapsed = false;
+      this._collapsed = options.expanded !== true;
       title.onclick = function () { self.setCollapsed(!self._collapsed); };
 
       for (var i = 0; i < rows.length; i++) {
@@ -109,6 +110,8 @@ export function createElementToggles(allLayers, options) {
       this._onLayerChange = function () { self.updateStates(); };
       map.on('layeradd layerremove', this._onLayerChange);
       this.updateStates();
+
+      this.setCollapsed(this._collapsed);
 
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);

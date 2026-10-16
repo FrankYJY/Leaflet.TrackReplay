@@ -128,7 +128,8 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `controlBarPosition` | `string` | `'bottomleft'` | Corner of the combined playback + timeline box |
 | `showLegend` | `boolean` | `true` | Show speed color legend |
 | `showViewFollow` | `boolean` | `true` | Show view follow control |
-| `viewFollowTitle` | `string` | `'Follow:'` | Title of the follow control |
+| `viewFollowTitle` | `string` | `'Follow:'` | Title of the follow control (doubles as its fold header) |
+| `viewFollowExpanded` | `boolean` | `false` | Start the follow panel unfolded |
 | `bearingTransform` | `(bearing: number) => number \| null` | pass-through | Transform bearing before rotation. Rotation is on by default; pass `null` to disable (slightly faster) |
 | `rotationOffset` | `number` | `0` | Degrees added to the bearing (e.g. `90` if the icon points right) |
 | `movingIcon` | `L.Icon \| L.DivIcon` | — | Custom icon for moving indicators |
@@ -156,7 +157,8 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `mapFocusSpace` | `boolean` | `true` | While the **map itself** is focused, Space toggles play/pause (nothing else is bound to the map) |
 | `showElementToggles` | `boolean` | `true` | Show the batch control (one tri-state checkbox per element type, across all objects) |
 | `elementTogglesPosition` | `string` | `'topright'` | Corner for the batch control |
-| `elementTogglesTitle` | `string` | `'Batch'` | Title of the batch control |
+| `elementTogglesTitle` | `string` | `'Batch'` | Title of the batch control (doubles as its fold header) |
+| `elementTogglesExpanded` | `boolean` | `false` | Start the batch panel unfolded |
 | `showInfoLabels` | `boolean` | `true` | Batch label display control — batch-opens the objects' existing popups (see below) |
 | `infoLabelsPosition` | `string` | `'topright'` | Corner of the label control |
 | `infoLabelsTitle` | `string` | `'Labels'` | Title of the label control |

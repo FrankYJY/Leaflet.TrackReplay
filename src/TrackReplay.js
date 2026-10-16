@@ -114,6 +114,8 @@ function collectSearchRecords(allLayers, elementKeys) {
  * @param {boolean} [options.showLegend=true]       - show color legend
  * @param {boolean} [options.showViewFollow=true]   - show view follow control
  * @param {string} [options.viewFollowTitle='Follow:'] - title of the follow control
+ * @param {boolean} [options.viewFollowExpanded=false] - start the follow panel
+ *        unfolded (its title is the fold header)
  * @param {Function} [options.bearingTransform]     - fn(bearing) => newBearing
  * @param {Object} [options.trackLayerOptions]      - options for track layer
  * @param {Object} [options.pointClusterOptions]    - options for point cluster
@@ -140,6 +142,8 @@ function collectSearchRecords(allLayers, elementKeys) {
  *        (one tri-state checkbox per element type, across all objects)
  * @param {string} [options.elementTogglesPosition='topright'] - control corner
  * @param {string} [options.elementTogglesTitle='Batch']  - toggles control title
+ * @param {boolean} [options.elementTogglesExpanded=false] - start the batch
+ *        panel unfolded (its title is the fold header)
  * @param {boolean} [options.showInfoLabels=true]   - batch label display control
  *        (rows = objects, columns = element types; batch-opens the layers'
  *        existing popups — the same popups a click shows)
@@ -466,6 +470,7 @@ function buildReplay(map, featureCollection, options, initialCluster) {
     var toggles = createElementToggles(allLayers, {
       position: options.elementTogglesPosition || 'topright',
       title: options.elementTogglesTitle || 'Batch',
+      expanded: options.elementTogglesExpanded,
     });
     if (toggles.hasRows) {
       elementToggles = toggles;
@@ -594,6 +599,7 @@ function buildReplay(map, featureCollection, options, initialCluster) {
   if (options.showViewFollow !== false) {
     viewFollow = createViewFollowControl(map, {
       title: options.viewFollowTitle,
+      expanded: options.viewFollowExpanded,
     });
     map.addControl(viewFollow.control);
 

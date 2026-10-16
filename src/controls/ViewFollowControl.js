@@ -166,10 +166,12 @@ export function createViewFollowControl(map, options) {
       var title = L.DomUtil.create('div', 'tr-vf-title', container);
       title.textContent = options.title || 'Follow:';
 
-      // The title doubles as the fold header; the body starts expanded.
+      // The title doubles as the fold header; collapsed by default
+      // (`options.expanded: true` starts it open).
+      this._container = container;
       var body = L.DomUtil.create('div', 'tr-vf-body', container);
       this._bodyEl = body;
-      this._collapsed = false;
+      this._collapsed = options.expanded !== true;
       title.onclick = function () { _controlInstance.setCollapsed(!_controlInstance._collapsed); };
 
       var modes = [
@@ -228,6 +230,8 @@ export function createViewFollowControl(map, options) {
           }
         }
       };
+
+      this.setCollapsed(this._collapsed);
 
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);
