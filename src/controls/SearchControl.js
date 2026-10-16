@@ -111,12 +111,14 @@ export function createSearchControl(options) {
       var container = L.DomUtil.create('div', 'leaflet-multisearch');
       this._container = container;
 
-      // collapsed state: a magnifier button that opens the search box
+      // The 🔍 button doubles as the control's header (like the other
+      // panels): it stays visible while open and folds the body on click.
       var toggle = L.DomUtil.create('button', 'lms-toggle', container);
       toggle.type = 'button';
       toggle.title = labels.open;
       toggle.innerHTML = '&#128269;'; // 🔍
-      toggle.onclick = function () { self._open(); };
+      toggle.onclick = function () { self._toggleOpen(); };
+      this._toggleEl = toggle;
 
       var box = L.DomUtil.create('div', 'lms-box', container);
       this._boxEl = box;
@@ -158,12 +160,6 @@ export function createSearchControl(options) {
       this._nextBtn = nextBtn;
 
       this._countEl = L.DomUtil.create('span', 'lms-count', row);
-
-      var closeBtn = L.DomUtil.create('button', 'lms-nav lms-close', row);
-      closeBtn.type = 'button';
-      closeBtn.title = labels.close;
-      closeBtn.textContent = '✕';
-      closeBtn.onclick = function () { self._close(); };
 
       this._listEl = L.DomUtil.create('div', 'lms-list', box);
       this._listEl.style.display = 'none';
@@ -217,8 +213,15 @@ export function createSearchControl(options) {
 
     // ---- internals ----
 
+    /** Header toggle — the icon stays visible when open; click folds it. */
+    _toggleOpen: function () {
+      if (L.DomUtil.hasClass(this._container, 'lms-open')) { this._close(); }
+      else { this._open(); }
+    },
+
     _open: function () {
       L.DomUtil.addClass(this._container, 'lms-open');
+      if (this._toggleEl) { this._toggleEl.title = labels.close; }
       this._input.focus();
       // reopening with an existing query restores its results
       if (this._input.value) { this._search(this._input.value, true); }
@@ -226,6 +229,7 @@ export function createSearchControl(options) {
 
     _close: function () {
       L.DomUtil.removeClass(this._container, 'lms-open');
+      if (this._toggleEl) { this._toggleEl.title = labels.open; }
       this._hideList();
     },
 

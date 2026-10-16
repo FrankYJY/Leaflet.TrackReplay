@@ -614,8 +614,14 @@
   background: #f4f4f4;
 }
 
+/* While open, the magnifier stays visible as the control's header */
 .leaflet-multisearch.lms-open .lms-toggle {
-  display: none;
+  display: block;
+  width: 100%;
+  text-align: left;
+  border-radius: 4px 4px 0 0;
+  border-bottom: 1px solid #eee;
+  padding: 4px 8px 3px;
 }
 
 .leaflet-multisearch .lms-box {

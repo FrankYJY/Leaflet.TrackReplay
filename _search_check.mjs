@@ -119,17 +119,19 @@ await page.locator(PANEL + ' .lms-item').first().click();
 await page.waitForTimeout(700);
 out.rowClick = await state();
 
-// ---- 3b. close button collapses; reopening restores query + results ----
-phase = 'close button';
-await page.locator(PANEL + ' .lms-close').click();
+// ---- 3b. header toggle folds; reopening restores query + results ----
+phase = 'header toggle';
+await page.locator(PANEL + ' .lms-toggle').click(); // header click -> fold
 await page.waitForTimeout(200);
-out.afterCloseBtn = await page.evaluate((sel) => ({
+out.afterFold = await page.evaluate((sel) => ({
   open: document.querySelector(sel).classList.contains('lms-open'),
+  toggleVisibleWhenClosed: getComputedStyle(document.querySelector(sel + ' .lms-toggle')).display !== 'none',
 }), PANEL);
-await page.locator(PANEL + ' .lms-toggle').click();
+await page.locator(PANEL + ' .lms-toggle').click(); // reopen
 await page.waitForTimeout(400);
 out.afterReopen = await page.evaluate((sel) => ({
   open: document.querySelector(sel).classList.contains('lms-open'),
+  headerKept: getComputedStyle(document.querySelector(sel + ' .lms-toggle')).display !== 'none',
   inputValue: document.querySelector(sel + ' .lms-input').value,
   rows: document.querySelectorAll(sel + ' .lms-item').length,
   listVisible: document.querySelector(sel + ' .lms-list').style.display !== 'none',

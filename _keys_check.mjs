@@ -112,8 +112,9 @@ await page.locator('.leaflet-multisearch .lms-input').fill('基站');
 await page.waitForTimeout(300);
 out.searchTyped = await page.evaluate(() =>
   document.querySelector('.leaflet-multisearch .lms-count').textContent);
-// focus the container itself (click its padding, away from the input)
-await page.locator('.leaflet-multisearch').click({ position: { x: 4, y: 4 } });
+// focus the container itself (click a non-focusable child -> nearest
+// focusable ancestor is the container; the header button would fold it)
+await page.locator('.leaflet-multisearch .lms-count').click();
 out.searchContainerFocused = await page.evaluate(() =>
   document.activeElement === document.querySelector('.leaflet-multisearch'));
 const c0 = (await snap()).center;
