@@ -31,7 +31,7 @@ import { createColorLegend } from './controls/ColorLegend.js';
 import { createElementToggles } from './controls/ElementToggles.js';
 import { createInfoLabels } from './controls/InfoLabels.js';
 import { createClusterScatterControl } from './controls/ClusterScatterControl.js';
-import { createDataImportControl } from './controls/DataImportControl.js';
+import { createDataSourceControl } from './controls/DataSourceControl.js';
 
 import { wgs84ToGcj02, gcj02ToWgs84, outOfChina } from './utils/GCJ02.js';
 import { parseGPX } from './utils/GPX.js';
@@ -112,16 +112,18 @@ var PLAYBACK_EVENTS = ['start', 'pause', 'stop', 'finished', 'tick', 'timechange
  * @param {Object[]} [options.baseLayers]      - [{ label, layer }] basemaps for
  *        the layer tree's radio group (host owns the tile layers)
  * @param {string} [options.baseLayersLabel='Basemap'] - label of that group
- * @param {boolean} [options.showDataImport=false] - (session-level) show the
- *        data import panel: file picker, drag & drop onto the map, paste,
- *        URL and sample datasets; it feeds `addDataset()` and survives every
- *        rebuild
- * @param {string} [options.dataImportPosition='topleft'] - panel corner
- * @param {string} [options.dataImportTitle='Import data'] - panel title
- * @param {Object} [options.dataImportLabels]   - panel UI strings
- * @param {Object} [options.dataImportMessages] - report text builders
- *        ({ added, degraded, empty, error })
- * @param {Object[]} [options.dataImportSamples] - [{ label, data }] samples
+ * @param {boolean} [options.showDataSource=false] - (session-level) show the
+ *        data source panel: the current datasets (each with a remove button,
+ *        plus clear-all) and the import channels (file picker, drag & drop
+ *        onto the map, paste, URL, samples); it feeds the dataset API and
+ *        survives every rebuild
+ * @param {string} [options.dataSourcePosition='topleft'] - panel corner
+ * @param {string} [options.dataSourceTitle='Data source'] - panel title
+ * @param {boolean} [options.dataSourceExpanded=false] - start with the panel open
+ * @param {Object} [options.dataSourceLabels]   - panel UI strings
+ * @param {Object} [options.dataSourceMessages] - text builders
+ *        ({ added, degraded, empty, error, rowMeta })
+ * @param {Object[]} [options.dataSourceSamples] - [{ label, data }] samples
  * @returns {Object} internal handle
  */
 function buildReplay(map, featureCollection, options, initialCluster) {
@@ -882,7 +884,7 @@ export function trackReplay(map, dataOrArray, options) {
   var instance = {
     map: map,
     datasets: container,
-    dataImportControl: null,
+    dataSourceControl: null,
     dataDatum: options.dataDatum || 'wgs84',
     mapDatum: options.mapDatum || 'wgs84',
 
@@ -1022,36 +1024,49 @@ export function trackReplay(map, dataOrArray, options) {
         currentBuild.destroy();
         currentBuild = null;
       }
-      if (instance.dataImportControl && instance.dataImportControl._map) {
-        map.removeControl(instance.dataImportControl);
+      if (instance.dataSourceControl && instance.dataSourceControl._map) {
+        map.removeControl(instance.dataSourceControl);
       }
-      instance.dataImportControl = null;
+      instance.dataSourceControl = null;
       container.clear();
       syncFields();
       bus.clear();
     },
   };
 
-  // ---- Session-level data import panel (survives every rebuild) ----
-  if (options.showDataImport) {
-    instance.dataImportControl = createDataImportControl({
-      position: options.dataImportPosition || 'topleft',
-      title: options.dataImportTitle || 'Import data',
-      labels: options.dataImportLabels,
-      messages: options.dataImportMessages,
-      samples: options.dataImportSamples,
-      onData: function (fc, meta) {
-        instance.addDataset(fc, { name: meta && meta.name });
-      },
-    });
-    map.addControl(instance.dataImportControl);
-  }
-
   // ---- Initial datasets → first build ----
   for (var di = 0; di < initial.length; di++) {
     container.add(initial[di]);
   }
   rebuild();
+
+  // ---- Session-level data source panel (survives every rebuild) ----
+  // Created after the first build, so its dataset list reflects the initial
+  // datasets right away; afterwards it stays in sync through the events.
+  if (options.showDataSource) {
+    instance.dataSourceControl = createDataSourceControl({
+      position: options.dataSourcePosition || 'topleft',
+      title: options.dataSourceTitle || 'Data source',
+      expanded: !!options.dataSourceExpanded,
+      labels: options.dataSourceLabels,
+      messages: options.dataSourceMessages,
+      samples: options.dataSourceSamples,
+      listDatasets: function () { return container.list(); },
+      removeDataset: function (id) { return instance.removeDataset(id); },
+      clearDatasets: function () { return instance.clearDatasets(); },
+      onData: function (fc, meta) {
+        instance.addDataset(fc, { name: meta && meta.name });
+      },
+    });
+    map.addControl(instance.dataSourceControl);
+
+    // Keep the dataset list in sync with every dataset change — including
+    // programmatic addDataset()/removeDataset() calls from host code.
+    var refreshDataSource = function () { instance.dataSourceControl.refreshDatasets(); };
+    bus.on('datasetadd', refreshDataSource);
+    bus.on('datasetremove', refreshDataSource);
+    bus.on('datasetsclear', refreshDataSource);
+  }
 
   return instance;
 }
@@ -1089,7 +1104,7 @@ if (typeof L !== 'undefined') {
     ElementToggles: { createElementToggles: createElementToggles },
     InfoLabels: { createInfoLabels: createInfoLabels },
     ClusterScatterControl: { createClusterScatterControl: createClusterScatterControl },
-    DataImportControl: { createDataImportControl: createDataImportControl },
+    DataSourceControl: { createDataSourceControl: createDataSourceControl },
   };
 
   L.TrackReplay.Utils = {

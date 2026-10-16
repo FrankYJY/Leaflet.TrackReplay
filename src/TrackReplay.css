@@ -415,8 +415,8 @@
   cursor: default;
 }
 
-/* ---- Data import control ---- */
-.leaflet-trackreplay-dataimport {
+/* ---- Data source control (datasets + import) ---- */
+.leaflet-trackreplay-datasource {
   background: #fff;
   padding: 6px 8px;
   border-radius: 4px;
@@ -425,27 +425,27 @@
   max-width: 280px;
 }
 
-.leaflet-trackreplay-dataimport .tr-di-title {
+.leaflet-trackreplay-datasource .tr-ds-title {
   font-weight: bold;
   color: #333;
   cursor: pointer;
   user-select: none;
 }
 
-.leaflet-trackreplay-dataimport.tr-di-expanded .tr-di-title {
+.leaflet-trackreplay-datasource.tr-ds-expanded .tr-ds-title {
   border-bottom: 1px solid #eee;
   padding-bottom: 3px;
   margin-bottom: 4px;
 }
 
-.leaflet-trackreplay-dataimport .tr-di-row {
+.leaflet-trackreplay-datasource .tr-ds-row {
   display: flex;
   align-items: flex-start;
   gap: 4px;
   margin: 4px 0;
 }
 
-.leaflet-trackreplay-dataimport .tr-di-btn {
+.leaflet-trackreplay-datasource .tr-ds-btn {
   background: #f4f4f4;
   border: 1px solid #ccc;
   border-radius: 3px;
@@ -455,12 +455,12 @@
   white-space: nowrap;
 }
 
-.leaflet-trackreplay-dataimport .tr-di-btn:hover {
+.leaflet-trackreplay-datasource .tr-ds-btn:hover {
   background: #e4e4e4;
 }
 
-.leaflet-trackreplay-dataimport .tr-di-paste,
-.leaflet-trackreplay-dataimport .tr-di-url {
+.leaflet-trackreplay-datasource .tr-ds-paste,
+.leaflet-trackreplay-datasource .tr-ds-url {
   flex: 1;
   min-width: 0;
   font-size: 11px;
@@ -471,23 +471,23 @@
   resize: vertical;
 }
 
-.leaflet-trackreplay-dataimport .tr-di-samples {
+.leaflet-trackreplay-datasource .tr-ds-samples {
   flex-wrap: wrap;
   align-items: center;
 }
 
-.leaflet-trackreplay-dataimport .tr-di-samples-label {
+.leaflet-trackreplay-datasource .tr-ds-samples-label {
   color: #888;
   font-size: 11px;
 }
 
-.leaflet-trackreplay-dataimport .tr-di-report {
+.leaflet-trackreplay-datasource .tr-ds-report {
   max-height: 90px;
   overflow-y: auto;
   margin-top: 4px;
 }
 
-.leaflet-trackreplay-dataimport .tr-di-line {
+.leaflet-trackreplay-datasource .tr-ds-line {
   font-size: 11px;
   line-height: 1.4;
   padding: 1px 0;
@@ -495,13 +495,75 @@
   word-break: break-all;
 }
 
-.leaflet-trackreplay-dataimport .tr-di-ok { color: #1a7f37; }
-.leaflet-trackreplay-dataimport .tr-di-warn { color: #b45309; }
-.leaflet-trackreplay-dataimport .tr-di-err { color: #c0392b; }
+.leaflet-trackreplay-datasource .tr-ds-ok { color: #1a7f37; }
+.leaflet-trackreplay-datasource .tr-ds-warn { color: #b45309; }
+.leaflet-trackreplay-datasource .tr-ds-err { color: #c0392b; }
+
+.leaflet-trackreplay-datasource .tr-ds-section {
+  margin-bottom: 6px;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 3px;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-section-label {
+  color: #888;
+  font-size: 11px;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-clear.tr-ds-armed {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-dataset-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-dataset-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-dataset-meta {
+  color: #aaa;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-remove {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-empty {
+  color: #bbb;
+  font-size: 11px;
+  padding: 1px 0;
+}
+
+.leaflet-trackreplay-datasource .tr-ds-section-head {
+  margin-top: 2px;
+}
 
 /* Overlay shown while a file is dragged over the map. pointer-events: none
    so the drop event still reaches the map container. */
-.tr-di-dropoverlay {
+.tr-ds-dropoverlay {
   position: absolute;
   inset: 0;
   z-index: 1200;
@@ -558,25 +620,25 @@
 .leaflet-container.dark .leaflet-trackreplay-controlbar,
 .leaflet-container.dark .leaflet-trackreplay-viewfollow,
 .leaflet-container.dark .leaflet-trackreplay-clusterscatter,
-.leaflet-container.dark .leaflet-trackreplay-dataimport,
+.leaflet-container.dark .leaflet-trackreplay-datasource,
 .leaflet-container.dark .leaflet-trackreplay-legend {
   background: #2a2a2a;
   color: #ddd;
 }
 
-.leaflet-container.dark .leaflet-trackreplay-dataimport .tr-di-title {
+.leaflet-container.dark .leaflet-trackreplay-datasource .tr-ds-title {
   color: #eee;
   border-color: #444;
 }
 
-.leaflet-container.dark .leaflet-trackreplay-dataimport .tr-di-btn {
+.leaflet-container.dark .leaflet-trackreplay-datasource .tr-ds-btn {
   background: #3a3a3a;
   border-color: #555;
   color: #ddd;
 }
 
-.leaflet-container.dark .leaflet-trackreplay-dataimport .tr-di-paste,
-.leaflet-container.dark .leaflet-trackreplay-dataimport .tr-di-url {
+.leaflet-container.dark .leaflet-trackreplay-datasource .tr-ds-paste,
+.leaflet-container.dark .leaflet-trackreplay-datasource .tr-ds-url {
   background: #333;
   border-color: #555;
   color: #ddd;

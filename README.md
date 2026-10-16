@@ -20,8 +20,9 @@
 - 🗂️ **Dataset sessions** — add / remove / clear GeoJSON datasets at runtime,
   merged by `layerPath`; playback time, visibility, batch labels and modes all
   survive every data change
-- 📥 **Data import panel** — ingest GeoJSON / GPX by file pick, drag & drop
-  onto the map, paste, URL or samples; GPX without timestamps degrades to
+- 📥 **Data source panel** — manage the session's datasets (list with per-item
+  remove, clear-all) and import new ones: GeoJSON / GPX via file pick, drag &
+  drop onto the map, paste, URL or samples; GPX without timestamps degrades to
   static lines, called out in a per-import report
 - 🏃 **Moving indicators** — animated markers with bearing-based rotation
 - 🛤️ **Dynamic route coloring** — traveled (red) / untraveled (blue) edge rendering
@@ -130,12 +131,13 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `clusterScatterPosition` | `string` | `'topright'` | Corner of that panel |
 | `clusterScatterTitle` | `string` | `'Cluster / Scatter'` | Title of that panel |
 | `clusterScatterLabels` | `object` | `{cluster:'Cluster', scatter:'Scatter'}` | Option labels inside the background-nodes section |
-| `showDataImport` | `boolean` | `false` | Show the data import panel (file picker / drag & drop / paste / URL / samples) |
-| `dataImportPosition` | `string` | `'topleft'` | Corner of that panel |
-| `dataImportTitle` | `string` | `'Import data'` | Title of that panel |
-| `dataImportLabels` | `object` | English defaults | Panel UI strings (`pick/add/load/pastePlaceholder/urlPlaceholder/samplesLabel/dropHint/pastedName`) |
-| `dataImportMessages` | `object` | English defaults | Report text builders `{added, degraded, empty, error}` |
-| `dataImportSamples` | `Object[]` | — | `[{label, data}]` sample datasets shown as buttons |
+| `showDataSource` | `boolean` | `false` | Show the data source panel (dataset list + import channels) |
+| `dataSourcePosition` | `string` | `'topleft'` | Corner of that panel |
+| `dataSourceTitle` | `string` | `'Data source'` | Title of that panel (shows the dataset count) |
+| `dataSourceExpanded` | `boolean` | `false` | Start with the panel open |
+| `dataSourceLabels` | `object` | English defaults | Panel UI strings (`pick/add/load/pastePlaceholder/urlPlaceholder/samplesLabel/dropHint/pastedName/datasetsLabel/importLabel/removeLabel/clearLabel/clearConfirmLabel/emptyLabel`) |
+| `dataSourceMessages` | `object` | English defaults | Text builders `{added, degraded, empty, error, rowMeta}` |
+| `dataSourceSamples` | `Object[]` | — | `[{label, data}]` sample datasets shown as buttons |
 | `showElementToggles` | `boolean` | `true` | Show the batch control (one tri-state checkbox per element type, across all objects) |
 | `elementTogglesPosition` | `string` | `'topright'` | Corner for the batch control |
 | `elementTogglesTitle` | `string` | `'Batch'` | Title of the batch control |
@@ -271,10 +273,17 @@ replay.getDataset(id);      // { id, name, featureCollection }
   everything, and `clearDatasets()` returns to that empty, reusable state.
   `destroy()` remains the full teardown.
 
-#### Data import panel (`showDataImport`, default off)
+#### Data source panel (`showDataSource`, default off)
 
-An optional panel — session-scoped, so it survives every rebuild — that
-ingests data through five channels:
+One session-scoped panel (survives every rebuild, expanded state included)
+with three parts:
+
+1. **Datasets** — the current datasets, one row each (name + feature count)
+   with its own remove button, plus a two-click **clear-all** (the first click
+   arms the button, the second confirms). The list refreshes from the
+   session's dataset events, so programmatic `addDataset()` /
+   `removeDataset()` calls update it too. The title shows the count.
+2. **Import** — five channels:
 
 | Channel | Notes |
 |---------|-------|
@@ -282,7 +291,10 @@ ingests data through five channels:
 | File picker | `.json` / `.geojson` / `.gpx` |
 | Paste | GeoJSON or GPX text |
 | URL | fetched with `fetch`; the server must allow CORS (or be same-origin) |
-| Samples | `dataImportSamples: [{ label, data }]` — one-click example datasets |
+| Samples | `dataSourceSamples: [{ label, data }]` — one-click example datasets |
+
+3. **Report** — one line per import attempt (added / degraded / empty /
+   error); the texts come from `dataSourceMessages`, so they can be localized.
 
 - GeoJSON may be a `FeatureCollection`, a single `Feature`, or an array of
   either. Features **without** a `layerPath` get `['imported', <name>]` so
@@ -293,8 +305,6 @@ ingests data through five channels:
   lines** and flagged in the report — they cannot participate in playback.
   Each `<trkseg>` becomes its own feature (gaps are never bridged), and
   `<wpt>` waypoints become static points with name/desc popups.
-- Every import is reported in the panel (added / degraded / empty / error);
-  the texts come from `dataImportMessages`, so they can be localized.
 
 ### TimestampEdgeoJSON Format
 
@@ -642,7 +652,7 @@ require network access.
 │   │   ├── ElementToggles.js   # Batch show/hide by element type
 │   │   ├── InfoLabels.js       # Batch label display
 │   │   ├── ClusterScatterControl.js # Cluster/scatter settings panel
-│   │   ├── DataImportControl.js# Import panel (file/drop/paste/URL/samples)
+│   │   ├── DataSourceControl.js# Datasets list + import panel (file/drop/paste/URL/samples)
 │   │   └── ColorLegend.js      # Speed color legend
 │   └── utils/
 │       ├── GeoUtils.js          # Distance, bearing, interpolation

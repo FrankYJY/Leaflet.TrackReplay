@@ -1,16 +1,25 @@
 /**
- * DataImportControl — a small ingestion panel for the dataset session.
+ * DataSourceControl — import AND manage the session's data sources.
  *
- * Accepts data as: dragged files (dropped onto the map), the file picker,
- * pasted text (GeoJSON or GPX), a URL to fetch, or the configured sample
- * datasets. GeoJSON input may be a FeatureCollection, a single Feature or an
- * array of them; features without a `layerPath` get `['imported', <name>]` so
- * they land in their own tree branch. GPX input is converted by Utils.GPX —
- * segments with time become replayable TimestampEdgeoJSON, segments without
- * time are imported as static lines and called out in the report.
+ * Three parts in one panel:
  *
- * The control is SESSION-scoped: TrackReplay's facade adds it next to
- * `addDataset`, so it survives every internal rebuild (open panel included).
+ *   1. **Datasets** — the current datasets (name + feature count), each with
+ *      its own remove button, plus a two-click "clear everything". The list
+ *      refreshes from the session's dataset events, so programmatic
+ *      `addDataset()` / `removeDataset()` calls (console, host code) update
+ *      it too.
+ *   2. **Import** — five channels: dragged files (dropped onto the map), the
+ *      file picker, pasted text (GeoJSON or GPX), a URL to fetch, and the
+ *      configured sample datasets. GeoJSON may be a FeatureCollection, a
+ *      single Feature or an array of either; features without a `layerPath`
+ *      get `['imported', <name>]`. GPX is converted by Utils.GPX — segments
+ *      with time become replayable TimestampEdgeoJSON, segments without time
+ *      become static lines and are called out in the report.
+ *   3. **Report** — one line per import attempt (added / degraded / empty /
+ *      error); texts come from `messages` so they can be localized.
+ *
+ * The control is SESSION-scoped: the facade adds it next to `addDataset`, so
+ * it survives every internal rebuild (expanded state included).
  */
 
 import { parseGPX } from '../utils/GPX.js';
@@ -24,6 +33,12 @@ var DEFAULT_LABELS = {
   samplesLabel: 'Samples',
   dropHint: 'Drop the file to import',
   pastedName: 'Pasted data',
+  datasetsLabel: 'Datasets',
+  importLabel: 'Import',
+  removeLabel: 'Remove',
+  clearLabel: 'Clear',
+  clearConfirmLabel: 'Confirm clear?',
+  emptyLabel: '(no data)',
 };
 
 var DEFAULT_MESSAGES = {
@@ -42,6 +57,9 @@ var DEFAULT_MESSAGES = {
   },
   error: function (err, name) {
     return '"' + name + '" failed: ' + (err && err.message ? err.message : err);
+  },
+  rowMeta: function (d) {
+    return d.featureCount + ' feature(s)';
   },
 };
 
@@ -90,29 +108,35 @@ function normalizeGeoJSON(data, name, layerPathFor) {
 }
 
 /**
- * Create the data import control.
+ * Create the data source control.
  *
  * @param {Object} options
  * @param {string} [options.position='topleft']
- * @param {string} [options.title='Import data']
+ * @param {string} [options.title='Data source']
+ * @param {boolean} [options.expanded=false] - start with the body open
  * @param {Object} [options.labels]   - UI strings (see DEFAULT_LABELS)
- * @param {Object} [options.messages] - report text builders:
- *        { added(fc, meta), degraded(report, name), empty(name), error(err, name) }
+ * @param {Object} [options.messages] - text builders:
+ *        { added(fc, meta), degraded(report, name), empty(name), error(err, name),
+ *          rowMeta(dataset) }
  * @param {Object[]} [options.samples] - [{ label, data }]; `data` is a
  *        FeatureCollection (or a function returning one), or raw text
  * @param {Function} [options.layerPathFor] - fn(name) => layerPath for
  *        features that have none (default ['imported', name])
+ * @param {Function} [options.listDatasets]   - fn() => [{id, name, featureCount}]
+ *        — enables the datasets section
+ * @param {Function} [options.removeDataset]  - fn(id) => bool
+ * @param {Function} [options.clearDatasets]  - fn() => removed count
  * @param {Function} options.onData - fn(featureCollection, meta) — the host
  *        wires this to `replay.addDataset`
- * @returns {L.Control}
+ * @returns {L.Control} with `refreshDatasets()`
  */
-export function createDataImportControl(options) {
+export function createDataSourceControl(options) {
   options = options || {};
   var labels = L.extend({}, DEFAULT_LABELS, options.labels || {});
   var messages = L.extend({}, DEFAULT_MESSAGES, options.messages || {});
   var layerPathFor = options.layerPathFor || function (name) { return ['imported', name]; };
 
-  var DataImportCtrl = L.Control.extend({
+  var DataSourceCtrl = L.Control.extend({
     options: {
       position: options.position || 'topleft',
     },
@@ -120,24 +144,48 @@ export function createDataImportControl(options) {
     onAdd: function (map) {
       var self = this;
       this._map = map;
+      this._clearArmed = false;
 
-      var container = L.DomUtil.create('div', 'leaflet-trackreplay-dataimport');
+      var container = L.DomUtil.create('div', 'leaflet-trackreplay-datasource');
       this._container = container;
 
-      var title = L.DomUtil.create('div', 'tr-di-title', container);
-      title.textContent = options.title || 'Import data';
-      title.onclick = function () { self._toggle(); };
+      this._titleEl = L.DomUtil.create('div', 'tr-ds-title', container);
+      this._titleEl.onclick = function () { self._toggle(); };
 
-      var body = L.DomUtil.create('div', 'tr-di-body', container);
-      body.style.display = 'none'; // collapsed by default
+      var body = L.DomUtil.create('div', 'tr-ds-body', container);
+      body.style.display = 'none';
       this._bodyEl = body;
 
-      // ---- file picker ----
-      var fileRow = L.DomUtil.create('div', 'tr-di-row', body);
-      var pickBtn = L.DomUtil.create('button', 'tr-di-btn', fileRow);
+      // ---- 1. datasets (management) ----
+      if (options.listDatasets) {
+        var dsSection = L.DomUtil.create('div', 'tr-ds-section tr-ds-datasets', body);
+
+        var dsHead = L.DomUtil.create('div', 'tr-ds-section-head', dsSection);
+        var dsHeadLabel = L.DomUtil.create('span', 'tr-ds-section-label', dsHead);
+        dsHeadLabel.textContent = labels.datasetsLabel;
+
+        var clearBtn = L.DomUtil.create('button', 'tr-ds-btn tr-ds-clear', dsHead);
+        clearBtn.type = 'button';
+        clearBtn.textContent = labels.clearLabel;
+        this._clearBtn = clearBtn;
+        this._clearTimer = null;
+        clearBtn.onclick = function () { self._onClearClick(); };
+
+        this._datasetsEl = L.DomUtil.create('div', 'tr-ds-dataset-list', dsSection);
+      }
+
+      // ---- 2. import (five channels) ----
+      var importSection = L.DomUtil.create('div', 'tr-ds-section tr-ds-import', body);
+      var importHead = L.DomUtil.create('div', 'tr-ds-section-head', importSection);
+      var importLabel = L.DomUtil.create('span', 'tr-ds-section-label', importHead);
+      importLabel.textContent = labels.importLabel || 'Import';
+
+      // file picker
+      var fileRow = L.DomUtil.create('div', 'tr-ds-row', importSection);
+      var pickBtn = L.DomUtil.create('button', 'tr-ds-btn', fileRow);
       pickBtn.type = 'button';
       pickBtn.textContent = labels.pick;
-      var fileInput = L.DomUtil.create('input', 'tr-di-file', fileRow);
+      var fileInput = L.DomUtil.create('input', 'tr-ds-file', fileRow);
       fileInput.type = 'file';
       fileInput.accept = '.json,.geojson,.gpx,application/json,application/gpx+xml';
       fileInput.multiple = true;
@@ -148,12 +196,12 @@ export function createDataImportControl(options) {
         fileInput.value = ''; // allow picking the same file again
       };
 
-      // ---- paste ----
-      var pasteRow = L.DomUtil.create('div', 'tr-di-row', body);
-      var textarea = L.DomUtil.create('textarea', 'tr-di-paste', pasteRow);
+      // paste
+      var pasteRow = L.DomUtil.create('div', 'tr-ds-row', importSection);
+      var textarea = L.DomUtil.create('textarea', 'tr-ds-paste', pasteRow);
       textarea.rows = 3;
       textarea.placeholder = labels.pastePlaceholder;
-      var addBtn = L.DomUtil.create('button', 'tr-di-btn', pasteRow);
+      var addBtn = L.DomUtil.create('button', 'tr-ds-btn', pasteRow);
       addBtn.type = 'button';
       addBtn.textContent = labels.add;
       addBtn.onclick = function () {
@@ -163,12 +211,12 @@ export function createDataImportControl(options) {
         self._ingestText(text, labels.pastedName);
       };
 
-      // ---- URL ----
-      var urlRow = L.DomUtil.create('div', 'tr-di-row', body);
-      var urlInput = L.DomUtil.create('input', 'tr-di-url', urlRow);
+      // URL
+      var urlRow = L.DomUtil.create('div', 'tr-ds-row', importSection);
+      var urlInput = L.DomUtil.create('input', 'tr-ds-url', urlRow);
       urlInput.type = 'text';
       urlInput.placeholder = labels.urlPlaceholder;
-      var loadBtn = L.DomUtil.create('button', 'tr-di-btn', urlRow);
+      var loadBtn = L.DomUtil.create('button', 'tr-ds-btn', urlRow);
       loadBtn.type = 'button';
       loadBtn.textContent = labels.load;
       loadBtn.onclick = function () {
@@ -177,14 +225,14 @@ export function createDataImportControl(options) {
         self._loadUrl(url);
       };
 
-      // ---- samples ----
+      // samples
       if (options.samples && options.samples.length) {
-        var sampleRow = L.DomUtil.create('div', 'tr-di-row tr-di-samples', body);
-        var sampleLabel = L.DomUtil.create('span', 'tr-di-samples-label', sampleRow);
+        var sampleRow = L.DomUtil.create('div', 'tr-ds-row tr-ds-samples', importSection);
+        var sampleLabel = L.DomUtil.create('span', 'tr-ds-samples-label', sampleRow);
         sampleLabel.textContent = labels.samplesLabel + ':';
         for (var si = 0; si < options.samples.length; si++) {
           (function (sample) {
-            var btn = L.DomUtil.create('button', 'tr-di-btn tr-di-sample', sampleRow);
+            var btn = L.DomUtil.create('button', 'tr-ds-btn tr-ds-sample', sampleRow);
             btn.type = 'button';
             btn.textContent = sample.label;
             btn.onclick = function () {
@@ -206,12 +254,12 @@ export function createDataImportControl(options) {
         }
       }
 
-      // ---- report ----
-      this._reportEl = L.DomUtil.create('div', 'tr-di-report', body);
+      // ---- 3. report ----
+      this._reportEl = L.DomUtil.create('div', 'tr-ds-report', body);
 
       // ---- file drag & drop on the map ----
       var mapContainer = map.getContainer();
-      this._overlay = L.DomUtil.create('div', 'tr-di-dropoverlay', mapContainer);
+      this._overlay = L.DomUtil.create('div', 'tr-ds-dropoverlay', mapContainer);
       this._overlay.textContent = labels.dropHint;
       this._overlay.style.display = 'none';
 
@@ -244,6 +292,9 @@ export function createDataImportControl(options) {
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);
 
+      this.refreshDatasets();
+      if (options.expanded) { this._toggle(); }
+
       return container;
     },
 
@@ -255,6 +306,7 @@ export function createDataImportControl(options) {
       if (this._overlay && this._overlay.parentNode) {
         this._overlay.parentNode.removeChild(this._overlay);
       }
+      if (this._clearTimer) { clearTimeout(this._clearTimer); }
     },
 
     // ---- internals ----
@@ -263,15 +315,76 @@ export function createDataImportControl(options) {
       var show = this._bodyEl.style.display === 'none';
       this._bodyEl.style.display = show ? '' : 'none';
       if (this._container) {
-        if (show) { L.DomUtil.addClass(this._container, 'tr-di-expanded'); }
-        else { L.DomUtil.removeClass(this._container, 'tr-di-expanded'); }
+        if (show) { L.DomUtil.addClass(this._container, 'tr-ds-expanded'); }
+        else { L.DomUtil.removeClass(this._container, 'tr-ds-expanded'); }
+      }
+    },
+
+    /** Rebuild the dataset rows (and the title count) from the session. */
+    refreshDatasets: function () {
+      if (!this._datasetsEl) { return; }
+      var self = this;
+      var list = options.listDatasets ? options.listDatasets() : [];
+
+      while (this._datasetsEl.firstChild) {
+        this._datasetsEl.removeChild(this._datasetsEl.firstChild);
+      }
+
+      if (!list.length) {
+        var empty = L.DomUtil.create('div', 'tr-ds-empty', this._datasetsEl);
+        empty.textContent = labels.emptyLabel;
+      } else {
+        for (var i = 0; i < list.length; i++) {
+          (function (d) {
+            var row = L.DomUtil.create('div', 'tr-ds-dataset-row', self._datasetsEl);
+            var name = L.DomUtil.create('span', 'tr-ds-dataset-name', row);
+            name.textContent = d.name;
+            name.title = d.name;
+            var meta = L.DomUtil.create('span', 'tr-ds-dataset-meta', row);
+            meta.textContent = messages.rowMeta(d);
+            var rm = L.DomUtil.create('button', 'tr-ds-btn tr-ds-remove', row);
+            rm.type = 'button';
+            rm.textContent = labels.removeLabel;
+            rm.onclick = function () {
+              if (options.removeDataset) { options.removeDataset(d.id); }
+            };
+          })(list[i]);
+        }
+      }
+
+      var base = options.title || 'Data source';
+      this._titleEl.textContent = list.length ? base + ' (' + list.length + ')' : base;
+    },
+
+    /** Two-click "clear": first click arms (text changes), second confirms. */
+    _onClearClick: function () {
+      var self = this;
+      if (!options.clearDatasets) { return; }
+      if (!this._clearArmed) {
+        this._clearArmed = true;
+        this._clearBtn.textContent = labels.clearConfirmLabel;
+        L.DomUtil.addClass(this._clearBtn, 'tr-ds-armed');
+        this._clearTimer = setTimeout(function () { self._disarmClear(); }, 3000);
+        return;
+      }
+      this._disarmClear();
+      options.clearDatasets();
+    },
+
+    _disarmClear: function () {
+      if (this._clearTimer) { clearTimeout(this._clearTimer); this._clearTimer = null; }
+      if (!this._clearArmed) { return; }
+      this._clearArmed = false;
+      if (this._clearBtn) {
+        this._clearBtn.textContent = labels.clearLabel;
+        L.DomUtil.removeClass(this._clearBtn, 'tr-ds-armed');
       }
     },
 
     /** Append one report line (kind: 'ok' | 'warn' | 'err'), keeping the last 8. */
     _report: function (kind, text) {
       if (!this._reportEl) { return; }
-      var line = L.DomUtil.create('div', 'tr-di-line tr-di-' + kind, this._reportEl);
+      var line = L.DomUtil.create('div', 'tr-ds-line tr-ds-' + kind, this._reportEl);
       line.textContent = text;
       var lines = this._reportEl.children;
       while (lines.length > 8) { this._reportEl.removeChild(lines[0]); }
@@ -359,5 +472,5 @@ export function createDataImportControl(options) {
     },
   });
 
-  return new DataImportCtrl();
+  return new DataSourceCtrl();
 }

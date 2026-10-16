@@ -431,12 +431,13 @@
       // switches that element between clustered and raw scatter rendering
       clusterScatterTitle: '聚合散点设置',
       clusterScatterLabels: { cluster: '聚合', scatter: '散点' },
-      // Data import panel — the session accepts new data at runtime; this
-      // panel ingests GeoJSON / GPX via file pick, drag & drop onto the map,
-      // paste, URL, or the built-in samples below
-      showDataImport: true,
-      dataImportTitle: '导入数据',
-      dataImportLabels: {
+      // Data source panel — manage the session's datasets (list / remove /
+      // clear) and import new ones (file pick, drag & drop onto the map,
+      // paste, URL, or the built-in samples below)
+      showDataSource: true,
+      dataSourceTitle: '数据源',
+      dataSourceExpanded: true,
+      dataSourceLabels: {
         pick: '选择文件…',
         add: '添加',
         load: '加载',
@@ -445,8 +446,14 @@
         samplesLabel: '示例',
         dropHint: '松开鼠标即可导入',
         pastedName: '贴入数据',
+        datasetsLabel: '数据集',
+        importLabel: '导入',
+        removeLabel: '移除',
+        clearLabel: '清空',
+        clearConfirmLabel: '确认清空？',
+        emptyLabel: '（暂无数据）',
       },
-      dataImportMessages: {
+      dataSourceMessages: {
         added: function (fc, meta) {
           var s = '已加入「' + meta.name + '」：' + fc.features.length + ' 个要素';
           if (meta.report) {
@@ -462,8 +469,9 @@
         error: function (err, name) {
           return '「' + name + '」导入失败：' + (err && err.message ? err.message : err);
         },
+        rowMeta: function (d) { return d.featureCount + ' 个要素'; },
       },
-      dataImportSamples: [
+      dataSourceSamples: [
         { label: '示例轨迹', data: function () {
             var t0 = Date.now(), coords = [], times = [];
             for (var i = 0; i < 40; i++) {
