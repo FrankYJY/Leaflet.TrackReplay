@@ -14,6 +14,7 @@ import { parseFeatureCollection } from './core/DataParser.js';
 import { createColorMapper } from './core/ColorMapper.js';
 import { createTimeEngine } from './core/TimeEngine.js';
 import { createLayerControl } from './core/LayerTreeBuilder.js';
+import { createDatasetContainer } from './core/DatasetContainer.js';
 
 import { createTrackLayer } from './layers/TrackLayer.js';
 import { createPointClusterLayer } from './layers/PointClusterLayer.js';
@@ -32,13 +33,25 @@ import { createInfoLabels } from './controls/InfoLabels.js';
 import { createClusterScatterControl } from './controls/ClusterScatterControl.js';
 
 import { wgs84ToGcj02, gcj02ToWgs84, outOfChina } from './utils/GCJ02.js';
+import { createEventBus } from './utils/EventBus.js';
+
+/** Playback events re-emitted on the session bus (forwarded per build). */
+var PLAYBACK_EVENTS = ['start', 'pause', 'stop', 'finished', 'tick', 'timechange', 'speedchange'];
 
 /**
- * Main TrackReplay orchestrator.
+ * Internal builder — assembles one complete replay (layers, controls, time
+ * engine) from a merged FeatureCollection.
+ *
+ * The session facade (`trackReplay`, below) calls this once at startup and
+ * again on every dataset change. It returns an internal *handle* instead of
+ * the public object, so the facade can swap the whole build while its own
+ * identity, listeners and API stay stable.
  *
  * @param {L.Map} map              - Leaflet map instance
  * @param {Object} featureCollection - GeoJSON FeatureCollection with TimestampEdgeoJSON features
- * @param {Object} [options]
+ * @param {Object} [options]        - full options list, documented on `trackReplay`
+ * @param {boolean} [initialCluster] - background-nodes rendering mode carried
+ *        over from the previous build (undefined → derived from options)
  * @param {string} [options.colorMode='fixed']     - 'fixed' | 'adaptive' | 'custom'
  * @param {Object} [options.colorConfig]            - custom colorbar config (for 'custom' mode)
  * @param {number[]} [options.colorRange]           - [min, max] km/h for 'fixed' mode
@@ -97,10 +110,20 @@ import { wgs84ToGcj02, gcj02ToWgs84, outOfChina } from './utils/GCJ02.js';
  * @param {Object[]} [options.baseLayers]      - [{ label, layer }] basemaps for
  *        the layer tree's radio group (host owns the tile layers)
  * @param {string} [options.baseLayersLabel='Basemap'] - label of that group
- * @returns {L.TrackReplay}
+ * @returns {Object} internal handle
  */
-export function trackReplay(map, featureCollection, options) {
+function buildReplay(map, featureCollection, options, initialCluster) {
   options = options || {};
+
+  // Background-nodes rendering mode, resolved BEFORE the layers are built: a
+  // mode carried over from the previous build (dataset rebuild) wins over the
+  // options default, and it decides the layer type the factory constructs
+  // (MarkerClusterGroup vs plain FeatureGroup).
+  var markerClusterAvailable = typeof L !== 'undefined' && !!L.markerClusterGroup;
+  var backgroundCluster = markerClusterAvailable &&
+    (initialCluster !== undefined
+      ? initialCluster === true
+      : !!(options.backgroundNodesOptions && options.backgroundNodesOptions.cluster === true));
 
   // ---- 1. Color Mapper ----
   var colorMapper = createColorMapper(options.colorMode || 'fixed', options.colorConfig, {
@@ -223,7 +246,8 @@ export function trackReplay(map, featureCollection, options) {
         // can rebuild this element in place.
         backgroundEntries.push({ objectKey: key, features: staticBuckets[bucket] });
         staticLayer = createBackgroundNodesLayer(
-          staticBuckets[bucket], options.backgroundNodesOptions);
+          staticBuckets[bucket],
+          L.extend({}, options.backgroundNodesOptions, { cluster: backgroundCluster }));
       } else {
         staticLayer = createStaticLayer(staticBuckets[bucket], options.staticLayerOptions);
       }
@@ -396,9 +420,8 @@ export function trackReplay(map, featureCollection, options) {
   // (MarkerClusterGroup vs plain FeatureGroup), so switching rebuilds that
   // element in place and re-points every reference at the new layer.
   var clusterScatterControl = null;
-  var markerClusterAvailable = typeof L !== 'undefined' && !!L.markerClusterGroup;
-  var backgroundCluster = markerClusterAvailable &&
-    !!(options.backgroundNodesOptions && options.backgroundNodesOptions.cluster === true);
+  // (backgroundCluster / markerClusterAvailable are resolved at the top of
+  // this function — the mode must be known before the layers are built.)
 
   /**
    * Recreate the layer control so its bookkeeping follows the rebuilt layers.
@@ -429,7 +452,12 @@ export function trackReplay(map, featureCollection, options) {
       corner.insertBefore(layerControl.getContainer(), corner.firstChild);
     }
 
-    if (instance) { instance.layerControl = layerControl; }
+    if (handle) {
+      handle.layerControl = layerControl;
+      // A cluster/scatter switch recreates the layer control WITHOUT a session
+      // rebuild — let the session refresh its public `layerControl` field.
+      if (handle._onLayerControlChange) { handle._onLayerControlChange(layerControl); }
+    }
   }
 
   /**
@@ -582,9 +610,11 @@ export function trackReplay(map, featureCollection, options) {
     map.addControl(legend);
   }
 
-  // ---- Public API ----
-  var instance = {
-    map: map,
+  // ---- Internal handle ----
+  // Everything the session facade needs to read, drive, and tear down this
+  // build. Public methods and the event forwarding live on the facade, so
+  // this handle can be swapped wholesale on every dataset change.
+  var handle = {
     timeEngine: timeEngine,
     colorMapper: colorMapper,
     layerGroups: layerGroups,
@@ -601,55 +631,11 @@ export function trackReplay(map, featureCollection, options) {
     controlBar: controlBar,
     legend: legend,
     parsed: parsed,
-    dataDatum: options.dataDatum || 'wgs84',
-    mapDatum: options.mapDatum || 'wgs84',
 
-    /** Start playback */
-    play: function () { timeEngine.play(); },
+    /** Current background-nodes rendering mode (carried across rebuilds). */
+    getClusterMode: function () { return backgroundCluster; },
 
-    /** Pause playback */
-    pause: function () { timeEngine.pause(); },
-
-    /** Stop playback (reset to start) */
-    stop: function () { timeEngine.stop(); },
-
-    /** Seek to a specific time (ms) */
-    seek: function (timeMs) { timeEngine.seek(timeMs); },
-
-    /** Set playback speed */
-    setSpeed: function (speed) { timeEngine.setSpeed(speed); },
-
-    /** Get playback speed */
-    getSpeed: function () { return timeEngine.getSpeed(); },
-
-    /** Enable/disable auto-restart (loop) */
-    setLoop: function (loop) { timeEngine.setLoop(loop); },
-
-    /** Get loop mode */
-    getLoop: function () { return timeEngine.getLoop(); },
-
-    /** Seek to a progress fraction (0-1) */
-    seekByProgress: function (progress) { return timeEngine.seekByProgress(progress); },
-
-    /** Get current time (ms) */
-    getCurrentTime: function () { return timeEngine.getCurrentTime(); },
-
-    /** Get playback progress (0-1) */
-    getProgress: function () { return timeEngine.getProgress(); },
-
-    /** Get playback state */
-    getState: function () { return timeEngine.getState(); },
-
-    /** Get the color legend data */
-    getLegend: function (steps) { return colorMapper.getLegend(steps); },
-
-    /** Register an event listener */
-    on: function (event, fn) { timeEngine.on(event, fn); },
-
-    /** Remove an event listener */
-    off: function (event, fn) { timeEngine.off(event, fn); },
-
-    /** Destroy the instance, removing all layers and controls */
+    /** Tear this build down: layers, controls, listeners. */
     destroy: function () {
       timeEngine.destroy();
 
@@ -711,6 +697,330 @@ export function trackReplay(map, featureCollection, options) {
     },
   };
 
+  return handle;
+}
+
+/**
+ * Main entry — a TrackReplay session.
+ *
+ * Startup shapes (all return the same session object):
+ *
+ *   L.trackReplay(map, featureCollection, options)  // one fixed dataset
+ *   L.trackReplay(map, [fc1, fc2, ...], options)    // several datasets
+ *   L.trackReplay(map, null, options)               // empty; add later
+ *
+ * The session owns a dataset container (每 addDataset 一次 = 一个数据集，是
+ * 增删的原子单位). `addDataset()` / `removeDataset()` / `clearDatasets()`
+ * change the data at runtime: internally the replay is rebuilt from the merged
+ * FeatureCollection and the session state is restored (playback time & run
+ * state, speed, loop, per-element visibility, checked batch-label cells,
+ * cluster/scatter mode, follow mode) — so this object's identity, its
+ * listeners and the user's view all survive the rebuild.
+ *
+ * `on()`/`off()` are one stable bus: playback events (forwarded from the
+ * per-build time engine) and dataset lifecycle events share it.
+ *
+ * Input coordinates must be WGS-84 (地球坐标系); building each dataset's
+ * `datum` is not supported — convert before adding if your source is GCJ-02.
+ *
+ * @param {L.Map} map
+ * @param {Object|Object[]} [dataOrArray] - a GeoJSON FeatureCollection, an
+ *        array of them, or null/undefined for an empty session
+ * @param {Object} [options] - see the options list on buildReplay()
+ * @returns {Object} session — playback methods (play/pause/stop/seek/
+ *          setSpeed/setLoop/seekByProgress/getCurrentTime/getProgress/
+ *          getState/getLegend), dataset methods (addDataset/removeDataset/
+ *          clearDatasets/listDatasets/getDataset), the container itself
+ *          (`datasets`), `on`/`off`, `destroy`, and the live build fields
+ *          (timeEngine, allLayers, infoLabels, … re-assigned on rebuild)
+ */
+export function trackReplay(map, dataOrArray, options) {
+  options = options || {};
+
+  // Startup shape: single FeatureCollection | array of them | empty.
+  var initial = [];
+  if (Array.isArray(dataOrArray)) { initial = dataOrArray; }
+  else if (dataOrArray) { initial = [dataOrArray]; }
+
+  var container = createDatasetContainer();
+  var bus = createEventBus();
+  var currentBuild = null;
+
+  /** Re-point the instance's live build fields at the current build. */
+  function syncFields() {
+    var b = currentBuild;
+    instance.timeEngine = b ? b.timeEngine : null;
+    instance.colorMapper = b ? b.colorMapper : null;
+    instance.layerGroups = b ? b.layerGroups : {};
+    instance.allLayers = b ? b.allLayers : {};
+    instance.movingIndicators = b ? b.movingIndicators : [];
+    instance.dynamicRoutes = b ? b.dynamicRoutes : [];
+    instance.viewFollow = b ? b.viewFollow : null;
+    instance.layerControl = b ? b.layerControl : null;
+    instance.elementToggles = b ? b.elementToggles : null;
+    instance.infoLabels = b ? b.infoLabels : null;
+    instance.clusterScatterControl = b ? b.clusterScatterControl : null;
+    instance.controls = b ? b.controls : null;
+    instance.timeline = b ? b.timeline : null;
+    instance.controlBar = b ? b.controlBar : null;
+    instance.legend = b ? b.legend : null;
+    instance.parsed = b ? b.parsed : null;
+  }
+
+  /** Forward a build's playback events into the session bus. */
+  function bindEngineEvents(build) {
+    for (var i = 0; i < PLAYBACK_EVENTS.length; i++) {
+      (function (evt) {
+        build.timeEngine.on(evt, function (data) { bus.emit(evt, data); });
+      })(PLAYBACK_EVENTS[i]);
+    }
+  }
+
+  /** Capture the user-visible state of a build, to be re-applied after a rebuild. */
+  function captureState(build) {
+    var state = {
+      time: build.timeEngine.getCurrentTime(),
+      playing: build.timeEngine.getState() === 'playing',
+      speed: build.timeEngine.getSpeed(),
+      loop: build.timeEngine.getLoop(),
+      cluster: build.getClusterMode(),
+      elements: [],
+      labels: [],
+      follow: null,
+    };
+
+    var keys = Object.keys(build.allLayers);
+    for (var i = 0; i < keys.length; i++) {
+      var els = build.allLayers[keys[i]].elements;
+      for (var j = 0; j < els.length; j++) {
+        state.elements.push({
+          objectKey: keys[i],
+          elementKey: els[j].key,
+          on: map.hasLayer(els[j].layer),
+        });
+      }
+    }
+
+    if (build.infoLabels) { state.labels = build.infoLabels.getCheckedCells(); }
+    if (build.viewFollow) { state.follow = build.viewFollow.getMode(); }
+    return state;
+  }
+
+  /** Re-apply a captured state onto a freshly built replay. */
+  function applyState(build, state) {
+    build.timeEngine.setSpeed(state.speed);
+    build.timeEngine.setLoop(state.loop);
+
+    // Per-element visibility — entries whose object/element no longer exists
+    // (e.g. it was owned by the removed dataset) are skipped.
+    for (var i = 0; i < state.elements.length; i++) {
+      var s = state.elements[i];
+      var owner = build.allLayers[s.objectKey];
+      if (!owner) { continue; }
+      for (var j = 0; j < owner.elements.length; j++) {
+        var el = owner.elements[j];
+        if (el.key !== s.elementKey) { continue; }
+        var on = map.hasLayer(el.layer);
+        if (s.on && !on) { map.addLayer(el.layer); }
+        else if (!s.on && on) { map.removeLayer(el.layer); }
+        break;
+      }
+    }
+
+    // Re-checked batch-label cells: their popups reopen through the map's
+    // layeradd hook as the new layers come onto the map.
+    if (build.infoLabels && state.labels.length) {
+      build.infoLabels.applyCheckedState(state.labels);
+    }
+
+    if (build.viewFollow && state.follow && state.follow.mode !== 'off') {
+      build.viewFollow.setMode(state.follow.mode, state.follow.target);
+    }
+
+    // Time and run state last. seek() clamps into the new time range; playing
+    // resumes from the restored position (if the position ended up at the new
+    // end, play() restarts from the beginning — TimeEngine's usual behavior).
+    build.timeEngine.seek(state.time);
+    if (state.playing) { build.timeEngine.play(); }
+  }
+
+  /**
+   * Rebuild from the container's merged data, restoring session state.
+   * Called at startup and on every dataset change.
+   */
+  function rebuild() {
+    var snap = null;
+    if (currentBuild) {
+      snap = captureState(currentBuild);
+      currentBuild.destroy();
+      currentBuild = null;
+      syncFields();
+    }
+
+    if (container.isEmpty()) { return; }
+
+    currentBuild = buildReplay(map, container.mergedFeatureCollection(), options,
+      snap ? snap.cluster : undefined);
+    currentBuild._onLayerControlChange = function (lc) { instance.layerControl = lc; };
+    bindEngineEvents(currentBuild);
+    if (snap) { applyState(currentBuild, snap); }
+    syncFields();
+  }
+
+  var instance = {
+    map: map,
+    datasets: container,
+    dataDatum: options.dataDatum || 'wgs84',
+    mapDatum: options.mapDatum || 'wgs84',
+
+    // Live build fields — kept current by syncFields() (null/empty before the
+    // first build and after clearDatasets()).
+    timeEngine: null,
+    colorMapper: null,
+    layerGroups: {},
+    allLayers: {},
+    movingIndicators: [],
+    dynamicRoutes: [],
+    viewFollow: null,
+    layerControl: null,
+    elementToggles: null,
+    infoLabels: null,
+    clusterScatterControl: null,
+    controls: null,
+    timeline: null,
+    controlBar: null,
+    legend: null,
+    parsed: null,
+
+    // ---- Playback (no-ops while the session has no data) ----
+
+    /** Start playback */
+    play: function () { if (currentBuild) { currentBuild.timeEngine.play(); } },
+
+    /** Pause playback */
+    pause: function () { if (currentBuild) { currentBuild.timeEngine.pause(); } },
+
+    /** Stop playback (reset to start) */
+    stop: function () { if (currentBuild) { currentBuild.timeEngine.stop(); } },
+
+    /** Seek to a specific time (ms) */
+    seek: function (timeMs) { if (currentBuild) { currentBuild.timeEngine.seek(timeMs); } },
+
+    /** Set playback speed */
+    setSpeed: function (speed) { if (currentBuild) { currentBuild.timeEngine.setSpeed(speed); } },
+
+    /** Get playback speed */
+    getSpeed: function () { return currentBuild ? currentBuild.timeEngine.getSpeed() : 1; },
+
+    /** Enable/disable auto-restart (loop) */
+    setLoop: function (loop) { if (currentBuild) { currentBuild.timeEngine.setLoop(loop); } },
+
+    /** Get loop mode */
+    getLoop: function () { return currentBuild ? currentBuild.timeEngine.getLoop() : false; },
+
+    /** Seek to a progress fraction (0-1) */
+    seekByProgress: function (progress) {
+      if (currentBuild) { return currentBuild.timeEngine.seekByProgress(progress); }
+    },
+
+    /** Get current time (ms); null while the session has no data */
+    getCurrentTime: function () { return currentBuild ? currentBuild.timeEngine.getCurrentTime() : null; },
+
+    /** Get playback progress (0-1) */
+    getProgress: function () { return currentBuild ? currentBuild.timeEngine.getProgress() : 0; },
+
+    /** Get playback state */
+    getState: function () { return currentBuild ? currentBuild.timeEngine.getState() : 'stopped'; },
+
+    /** Get the color legend data */
+    getLegend: function (steps) { return currentBuild ? currentBuild.colorMapper.getLegend(steps) : []; },
+
+    // ---- Datasets (每次 add = 一个数据集；删除即精确移除这一份) ----
+
+    /**
+     * Add a dataset (one GeoJSON FeatureCollection, WGS-84). It merges with
+     * the existing data by layerPath and shows up immediately; the session
+     * state is preserved.
+     * @param {Object} featureCollection
+     * @param {Object} [opts] - { name } display name
+     * @returns {number} the dataset id (pass it to removeDataset)
+     */
+    addDataset: function (featureCollection, opts) {
+      var ds = container.add(featureCollection, opts);
+      rebuild();
+      bus.emit('datasetadd', {
+        id: ds.id,
+        name: ds.name,
+        featureCount: ds.featureCount,
+        total: container.count(),
+      });
+      return ds.id;
+    },
+
+    /**
+     * Remove exactly one dataset (by the id returned from addDataset).
+     * Objects that spanned several datasets survive with the remaining parts;
+     * objects owned by this dataset disappear with it.
+     * @param {number} id
+     * @returns {boolean} true when a dataset was removed
+     */
+    removeDataset: function (id) {
+      var removed = container.remove(id);
+      if (!removed) { return false; }
+      rebuild();
+      bus.emit('datasetremove', {
+        id: removed.id,
+        name: removed.name,
+        featureCount: removed.featureCount,
+        total: container.count(),
+      });
+      return true;
+    },
+
+    /**
+     * Remove every dataset (the session stays alive; add more later).
+     * @returns {number} how many datasets were removed
+     */
+    clearDatasets: function () {
+      var n = container.clear();
+      if (n === 0) { return 0; }
+      rebuild();
+      bus.emit('datasetsclear', { removed: n });
+      return n;
+    },
+
+    /** @returns {Array<{id, name, featureCount}>} the current datasets */
+    listDatasets: function () { return container.list(); },
+
+    /** @returns {{id, name, featureCollection}|null} one dataset's raw data */
+    getDataset: function (id) { return container.get(id); },
+
+    // ---- Events & lifecycle ----
+
+    /** Register an event listener (playback + dataset events share one bus) */
+    on: function (event, fn) { bus.on(event, fn); },
+
+    /** Remove an event listener */
+    off: function (event, fn) { bus.off(event, fn); },
+
+    /** Destroy the session: all layers, controls, listeners and datasets */
+    destroy: function () {
+      if (currentBuild) {
+        currentBuild.destroy();
+        currentBuild = null;
+      }
+      container.clear();
+      syncFields();
+      bus.clear();
+    },
+  };
+
+  // ---- Initial datasets → first build ----
+  for (var di = 0; di < initial.length; di++) {
+    container.add(initial[di]);
+  }
+  rebuild();
+
   return instance;
 }
 
@@ -726,6 +1036,7 @@ if (typeof L !== 'undefined') {
     ColorMapper: { createColorMapper: createColorMapper },
     TimeEngine: { createTimeEngine: createTimeEngine },
     LayerTreeBuilder: { createLayerControl: createLayerControl },
+    DatasetContainer: { createDatasetContainer: createDatasetContainer },
   };
 
   L.TrackReplay.Layers = {

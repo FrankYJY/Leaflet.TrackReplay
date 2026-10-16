@@ -17,6 +17,9 @@
   time sequence (`element: "background_nodes"`), drawn as clickable dots
   *beneath* the tracks — scatter by default, clustering opt-in — with per-node
   popups and batch controls
+- 🗂️ **Dataset sessions** — add / remove / clear GeoJSON datasets at runtime,
+  merged by `layerPath`; playback time, visibility, batch labels and modes all
+  survive every data change
 - 🏃 **Moving indicators** — animated markers with bearing-based rotation
 - 🛤️ **Dynamic route coloring** — traveled (red) / untraveled (blue) edge rendering
 - 👁️ **View following** — auto-pan to follow moving objects (latest/random/named/off)
@@ -197,6 +200,11 @@ at once**, independent of the layer tree's per-object checkboxes:
 | `getCurrentTime()` | Get current time (ms) |
 | `getProgress()` | Get progress (0–1) |
 | `getState()` | Get state: `'playing'` / `'paused'` / `'stopped'` |
+| `addDataset(fc, opts?)` | Add a dataset at runtime (merged by `layerPath`); returns its id |
+| `removeDataset(id)` | Remove exactly that dataset's parts |
+| `clearDatasets()` | Remove all datasets (the session stays alive) |
+| `listDatasets()` | Metadata of the current datasets |
+| `getDataset(id)` | One dataset's raw FeatureCollection |
 | `on(event, fn)` | Register event listener |
 | `off(event, fn)` | Remove event listener |
 | `destroy()` | Remove all layers, controls, and listeners |
@@ -212,6 +220,47 @@ at once**, independent of the layer tree's per-object checkboxes:
 | `tick` | `{ time, progress }` | Each time frame |
 | `timechange` | `{ time, progress }` | Time changed (seek/stop) |
 | `speedchange` | `{ speed }` | Speed multiplier changed |
+| `datasetadd` | `{ id, name, featureCount, total }` | A dataset was added |
+| `datasetremove` | `{ id, name, featureCount, total }` | A dataset was removed |
+| `datasetsclear` | `{ removed }` | All datasets were removed |
+
+### Datasets (runtime data management)
+
+`L.trackReplay` is a **session** over a set of datasets. Three startup shapes,
+all returning the same object:
+
+```javascript
+L.trackReplay(map, featureCollection, options);   // one fixed dataset (as before)
+L.trackReplay(map, [fc1, fc2], options);          // several datasets at once
+L.trackReplay(map, null, options);                // empty; add data later
+```
+
+Each `addDataset()` call is one dataset — the atomic unit of removal:
+
+```javascript
+var id = replay.addDataset(fc, { name: '10月14日轨迹' });
+replay.removeDataset(id);   // removes exactly this dataset's parts
+replay.clearDatasets();     // remove all data (session stays alive, reusable)
+replay.listDatasets();      // [{ id, name, featureCount }, …]
+replay.getDataset(id);      // { id, name, featureCollection }
+```
+
+- **Merge by `layerPath`** — datasets sharing a `layerPath` merge into one
+  object (e.g. appending more segments to an existing track). Removal happens
+  at the *source*: the container drops the dataset and the replay is rebuilt
+  from what remains — objects that spanned several datasets survive with the
+  remaining parts; objects owned by the removed dataset disappear with it
+  (their tree entries, batch-toggle rows and label columns go too).
+- **State survives every rebuild** — playback time & run state, speed, loop,
+  per-element visibility, checked batch-label cells, cluster/scatter mode and
+  follow mode are captured and re-applied; `on()`/`off()` listeners keep
+  working (one stable event bus carries playback *and* dataset events).
+- **Input contract**: every dataset must be **WGS-84 (地球坐标系)**. There is
+  no per-dataset datum setting — convert GCJ-02 sources before adding them.
+- **Empty session**: with no data there is no build to show (`getState()` is
+  `'stopped'`, `getCurrentTime()` is `null`); the first `addDataset()` builds
+  everything, and `clearDatasets()` returns to that empty, reusable state.
+  `destroy()` remains the full teardown.
 
 ### TimestampEdgeoJSON Format
 

@@ -189,6 +189,7 @@ export function createInfoLabels(allLayers, options) {
       this._state[row.key] = {};
 
       var tr = L.DomUtil.create('tr', 'tr-il-row', tbody);
+      row._tr = tr; // kept for setCellState()/applyCheckedState()
 
       // row header — click to switch the whole row
       var head = L.DomUtil.create('td', 'tr-il-rowhead', tr);
@@ -221,6 +222,7 @@ export function createInfoLabels(allLayers, options) {
 
         // index this cell's layers for the layeradd/layerremove hook
         var cell = row.cells[colKey];
+        cell._box = box; // kept for applyCheckedState()
         for (var t = 0; t < cell.targets.length; t++) {
           this._targetIndex[L.stamp(cell.targets[t].layer)] = {
             rowKey: row.key,
@@ -292,6 +294,44 @@ export function createInfoLabels(allLayers, options) {
               elementKey: key,
             };
           }
+        }
+      }
+    },
+
+    /**
+     * Snapshot the currently checked cells (rowKey/elementKey pairs). Used by
+     * the session facade when a dataset change rebuilds every layer/control.
+     */
+    getCheckedCells: function () {
+      var out = [];
+      for (var rowKey in this._state) {
+        if (!this._state.hasOwnProperty(rowKey)) { continue; }
+        for (var elementKey in this._state[rowKey]) {
+          if (this._state[rowKey][elementKey]) {
+            out.push({ rowKey: rowKey, elementKey: elementKey });
+          }
+        }
+      }
+      return out;
+    },
+
+    /**
+     * Re-check a snapshot of cells on a freshly built control. Cells whose
+     * object/element is gone (owned by a removed dataset) are skipped; the
+     * popups of the new layers reopen through the map's layeradd hook.
+     */
+    applyCheckedState: function (checkedCells) {
+      for (var i = 0; i < checkedCells.length; i++) {
+        var s = checkedCells[i];
+        for (var r = 0; r < rows.length; r++) {
+          if (rows[r].key !== s.rowKey) { continue; }
+          var row = rows[r];
+          var cell = row.cells[s.elementKey];
+          if (!cell || !cell._box) { break; }
+          cell._box.checked = true;
+          this._applyCell(row, s.elementKey, true);
+          this._refreshRow(row, row._tr);
+          break;
         }
       }
     },
