@@ -326,6 +326,24 @@
   font-size: 11px;
 }
 
+/* ---- Foldable panel headers (batch / cluster-scatter / follow) ----
+   The title doubles as the fold toggle, matching the labels + search panels.
+   Expanded is the default; the collapsed state drops the header separator. */
+.leaflet-trackreplay-elementtoggles .tr-et-title,
+.leaflet-trackreplay-clusterscatter .tr-cs-title,
+.leaflet-trackreplay-viewfollow .tr-vf-title {
+  cursor: pointer;
+  user-select: none;
+}
+
+.leaflet-trackreplay-elementtoggles.tr-et-collapsed .tr-et-title,
+.leaflet-trackreplay-clusterscatter.tr-cs-collapsed .tr-cs-title,
+.leaflet-trackreplay-viewfollow.tr-vf-collapsed .tr-vf-title {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
 /* ---- Batch label display control (rows = objects, cols = element types) ---- */
 .leaflet-trackreplay-infolabels {
   background: #fff;

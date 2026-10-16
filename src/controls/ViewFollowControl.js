@@ -166,6 +166,12 @@ export function createViewFollowControl(map, options) {
       var title = L.DomUtil.create('div', 'tr-vf-title', container);
       title.textContent = 'Follow:';
 
+      // The title doubles as the fold header; the body starts expanded.
+      var body = L.DomUtil.create('div', 'tr-vf-body', container);
+      this._bodyEl = body;
+      this._collapsed = false;
+      title.onclick = function () { _controlInstance.setCollapsed(!_controlInstance._collapsed); };
+
       var modes = [
         { value: 'off', label: 'Off' },
         { value: 'latest', label: 'Latest' },
@@ -174,7 +180,7 @@ export function createViewFollowControl(map, options) {
       ];
 
       for (var i = 0; i < modes.length; i++) {
-        var label = L.DomUtil.create('label', 'tr-vf-option', container);
+        var label = L.DomUtil.create('label', 'tr-vf-option', body);
         var radio = L.DomUtil.create('input', '', label);
         radio.type = 'radio';
         radio.name = 'tr-viewfollow';
@@ -191,7 +197,7 @@ export function createViewFollowControl(map, options) {
       }
 
       // Named target selector
-      var selectContainer = L.DomUtil.create('div', 'tr-vf-select-container', container);
+      var selectContainer = L.DomUtil.create('div', 'tr-vf-select-container', body);
       var select = L.DomUtil.create('select', 'tr-vf-select', selectContainer);
       select.style.maxHeight = '120px';
       select.style.overflowY = 'auto';
@@ -228,6 +234,19 @@ export function createViewFollowControl(map, options) {
 
       return container;
     },
+
+    /** Fold/unfold the body (the title is the header). */
+    setCollapsed: function (collapsed) {
+      this._collapsed = !!collapsed;
+      if (this._bodyEl) { this._bodyEl.style.display = this._collapsed ? 'none' : ''; }
+      if (this._container) {
+        if (this._collapsed) { L.DomUtil.addClass(this._container, 'tr-vf-collapsed'); }
+        else { L.DomUtil.removeClass(this._container, 'tr-vf-collapsed'); }
+      }
+    },
+
+    /** @returns {boolean} */
+    isCollapsed: function () { return !!this._collapsed; },
   });
 
   var control = new ViewFollowCtrl();

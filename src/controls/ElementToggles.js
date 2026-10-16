@@ -70,12 +70,19 @@ export function createElementToggles(allLayers, options) {
       var title = L.DomUtil.create('div', 'tr-et-title', container);
       title.textContent = options.title || 'Batch';
 
+      // The title doubles as the fold header (like the labels/search panels);
+      // the body starts expanded.
+      var body = L.DomUtil.create('div', 'tr-et-body', container);
+      this._bodyEl = body;
+      this._collapsed = false;
+      title.onclick = function () { self.setCollapsed(!self._collapsed); };
+
       for (var i = 0; i < rows.length; i++) {
         var row = rows[i];
 
         // div row (block by default → vertical list even without the stylesheet);
         // the label inside keeps "click the text to toggle" working
-        var line = L.DomUtil.create('div', 'tr-et-row', container);
+        var line = L.DomUtil.create('div', 'tr-et-row', body);
         var labelEl = L.DomUtil.create('label', 'tr-et-label', line);
 
         var input = L.DomUtil.create('input', 'tr-et-checkbox', labelEl);
@@ -112,6 +119,19 @@ export function createElementToggles(allLayers, options) {
     onRemove: function (map) {
       map.off('layeradd layerremove', this._onLayerChange);
     },
+
+    /** Fold/unfold the body (the title is the header). */
+    setCollapsed: function (collapsed) {
+      this._collapsed = !!collapsed;
+      if (this._bodyEl) { this._bodyEl.style.display = this._collapsed ? 'none' : ''; }
+      if (this._container) {
+        if (this._collapsed) { L.DomUtil.addClass(this._container, 'tr-et-collapsed'); }
+        else { L.DomUtil.removeClass(this._container, 'tr-et-collapsed'); }
+      }
+    },
+
+    /** @returns {boolean} */
+    isCollapsed: function () { return !!this._collapsed; },
 
     /** Show or hide every layer of one element type (all objects). */
     _setAll: function (row, on) {

@@ -131,8 +131,9 @@ export function createInfoLabels(allLayers, options) {
       this._titleEl.onclick = function () { self._toggleExpanded(); };
 
       var table = L.DomUtil.create('table', 'tr-il-table', container);
-      table.style.display = 'none';
+      table.style.display = 'none'; // collapsed by default
       this._tableEl = table;
+      this._collapsed = true;
 
       // header: one column per element type (headers are labels, not controls)
       var thead = L.DomUtil.create('thead', '', table);
@@ -361,13 +362,22 @@ export function createInfoLabels(allLayers, options) {
     },
 
     _toggleExpanded: function () {
-      var show = this._tableEl.style.display === 'none';
-      this._tableEl.style.display = show ? '' : 'none';
+      this.setCollapsed(!this._collapsed);
+    },
+
+    /** Fold/unfold the label table (the title is the header). */
+    setCollapsed: function (collapsed) {
+      var show = !collapsed;
+      this._collapsed = !!collapsed;
+      if (this._tableEl) { this._tableEl.style.display = show ? '' : 'none'; }
       if (this._container) {
         if (show) { L.DomUtil.addClass(this._container, 'tr-il-expanded'); }
         else { L.DomUtil.removeClass(this._container, 'tr-il-expanded'); }
       }
     },
+
+    /** @returns {boolean} */
+    isCollapsed: function () { return !!this._collapsed; },
 
     _updateTitle: function () {
       var base = options.title || 'Labels';

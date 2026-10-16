@@ -881,6 +881,15 @@ export function trackReplay(map, dataOrArray, options) {
 
     if (build.infoLabels) { state.labels = build.infoLabels.getCheckedCells(); }
     if (build.viewFollow) { state.follow = build.viewFollow.getMode(); }
+
+    // Fold states of the collapsible panels (null → the panel has no state).
+    state.panels = {
+      elementToggles: build.elementToggles ? build.elementToggles.isCollapsed() : null,
+      infoLabels: build.infoLabels ? build.infoLabels.isCollapsed() : null,
+      clusterScatter: build.clusterScatterControl ? build.clusterScatterControl.isCollapsed() : null,
+      viewFollow: (build.viewFollow && build.viewFollow.control) ?
+        build.viewFollow.control.isCollapsed() : null,
+    };
     return state;
   }
 
@@ -913,6 +922,23 @@ export function trackReplay(map, dataOrArray, options) {
 
     if (build.viewFollow && state.follow && state.follow.mode !== 'off') {
       build.viewFollow.setMode(state.follow.mode, state.follow.target);
+    }
+
+    // Fold states of the collapsible panels
+    if (state.panels) {
+      var p = state.panels;
+      if (build.elementToggles && p.elementToggles != null) {
+        build.elementToggles.setCollapsed(p.elementToggles);
+      }
+      if (build.infoLabels && p.infoLabels != null) {
+        build.infoLabels.setCollapsed(p.infoLabels);
+      }
+      if (build.clusterScatterControl && p.clusterScatter != null) {
+        build.clusterScatterControl.setCollapsed(p.clusterScatter);
+      }
+      if (build.viewFollow && build.viewFollow.control && p.viewFollow != null) {
+        build.viewFollow.control.setCollapsed(p.viewFollow);
+      }
     }
 
     // Time and run state last. seek() clamps into the new time range; playing

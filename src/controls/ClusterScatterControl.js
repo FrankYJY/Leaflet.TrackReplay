@@ -34,13 +34,20 @@ export function createClusterScatterControl(options) {
     },
 
     onAdd: function (/*map*/) {
+      var self = this;
       var container = L.DomUtil.create('div', 'leaflet-trackreplay-clusterscatter');
 
       var title = L.DomUtil.create('div', 'tr-cs-title', container);
       title.textContent = options.title || 'Cluster / Scatter';
 
+      // The title doubles as the fold header; the body starts expanded.
+      var body = L.DomUtil.create('div', 'tr-cs-body', container);
+      this._bodyEl = body;
+      this._collapsed = false;
+      title.onclick = function () { self.setCollapsed(!self._collapsed); };
+
       // ---- one section per element type (currently: background nodes) ----
-      var section = L.DomUtil.create('div', 'tr-cs-section', container);
+      var section = L.DomUtil.create('div', 'tr-cs-section', body);
 
       var sectionTitle = L.DomUtil.create('div', 'tr-cs-section-title', section);
       sectionTitle.textContent = options.sectionLabel || 'Background nodes';
@@ -96,6 +103,19 @@ export function createClusterScatterControl(options) {
       if (!this._inputs || !this._inputs[mode]) { return; }
       this._inputs[mode].checked = true;
     },
+
+    /** Fold/unfold the body (the title is the header). */
+    setCollapsed: function (collapsed) {
+      this._collapsed = !!collapsed;
+      if (this._bodyEl) { this._bodyEl.style.display = this._collapsed ? 'none' : ''; }
+      if (this._container) {
+        if (this._collapsed) { L.DomUtil.addClass(this._container, 'tr-cs-collapsed'); }
+        else { L.DomUtil.removeClass(this._container, 'tr-cs-collapsed'); }
+      }
+    },
+
+    /** @returns {boolean} */
+    isCollapsed: function () { return !!this._collapsed; },
   });
 
   return new ClusterScatterCtrl();

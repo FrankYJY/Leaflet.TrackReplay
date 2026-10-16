@@ -87,6 +87,10 @@ out.initial = await page.evaluate(() => ({
     .every((m) => typeof replay[m] === 'function'),
   hasContainerExport: !!(L.TrackReplay.Core.DatasetContainer && L.TrackReplay.Core.DatasetContainer.createDatasetContainer),
   controlBar: !!document.querySelector('.leaflet-trackreplay-controlbar'),
+  panelsDefaultExpanded: !replay.elementToggles.isCollapsed() &&
+    !replay.clusterScatterControl.isCollapsed() &&
+    !replay.viewFollow.control.isCollapsed(),
+  infoLabelsDefaultCollapsed: replay.infoLabels.isCollapsed(),
 }));
 
 // ---- A2. set up a distinctive state, then add a dataset ----
@@ -110,6 +114,12 @@ out.before = await page.evaluate(() => {
   cs.querySelectorAll('input[type=radio]').forEach(function (r) {
     if (r.value === 'cluster') { r.click(); }
   });
+  // fold the foldable panels + expand the (collapsed-by-default) label table —
+  // none of these may reset when the dataset change rebuilds the controls
+  document.querySelector('.leaflet-trackreplay-elementtoggles .tr-et-title').click();
+  document.querySelector('.leaflet-trackreplay-clusterscatter .tr-cs-title').click();
+  document.querySelector('.leaflet-trackreplay-viewfollow .tr-vf-title').click();
+  document.querySelector('.leaflet-trackreplay-infolabels .tr-il-title').click();
   return {
     time: replay.getCurrentTime(),
     endTime: replay.timeEngine._endTime,
@@ -145,6 +155,10 @@ out.afterAdd = await page.evaluate(() => {
     })(),
     bgIsClusterGroup: typeof replay.allLayers['background/基站'].elements
       .find(function (e) { return e.key === 'background_nodes'; }).layer.refreshClusters === 'function',
+    panelsPersist: replay.elementToggles.isCollapsed() &&
+      replay.clusterScatterControl.isCollapsed() &&
+      replay.viewFollow.control.isCollapsed() &&
+      !replay.infoLabels.isCollapsed(),
     event: window.__dsEvents.filter(function (e) { return e.evt === 'datasetadd'; }).pop(),
   };
 });
