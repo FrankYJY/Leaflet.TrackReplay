@@ -24,6 +24,10 @@
   remove, clear-all) and import new ones: GeoJSON / GPX via file pick, drag &
   drop onto the map, paste, URL or samples; GPX without timestamps degrades to
   static lines, called out in a per-import report
+- 🔎 **Multi-search (leaflet-multisearch)** — text search over element labels
+  where *every occurrence is a hit*: duplicates included, hit count badge,
+  Enter / ◀ / ▶ cycles through them (wraparound), each jump opens that node's
+  popup (cluster-aware); over the background nodes by default
 - 🏃 **Moving indicators** — animated markers with bearing-based rotation
 - 🛤️ **Dynamic route coloring** — traveled (red) / untraveled (blue) edge rendering
 - 👁️ **View following** — auto-pan to follow moving objects (latest/random/named/off)
@@ -138,6 +142,12 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `dataSourceLabels` | `object` | English defaults | Panel UI strings (`pick/add/load/pastePlaceholder/urlPlaceholder/samplesLabel/dropHint/pastedName/datasetsLabel/importLabel/removeLabel/clearLabel/clearConfirmLabel/emptyLabel`) |
 | `dataSourceMessages` | `object` | English defaults | Text builders `{added, degraded, empty, error, rowMeta}` |
 | `dataSourceSamples` | `Object[]` | — | `[{label, data}]` sample datasets shown as buttons |
+| `showSearch` | `boolean` | `false` | Show the multi-search control (leaflet-multisearch) |
+| `searchPosition` | `string` | `'topleft'` | Corner of the search control |
+| `searchElements` | `string[]` | `['background_nodes']` | Element types included in the search index |
+| `searchZoom` | `number` | — | `setView` zoom for each jump (omit to pan at the current zoom) |
+| `searchLabels` | `object` | English defaults | `{open, placeholder, prev, next}` |
+| `searchMessages` | `object` | English defaults | `{count, of, more, empty}` text builders |
 | `showElementToggles` | `boolean` | `true` | Show the batch control (one tri-state checkbox per element type, across all objects) |
 | `elementTogglesPosition` | `string` | `'topright'` | Corner for the batch control |
 | `elementTogglesTitle` | `string` | `'Batch'` | Title of the batch control |
@@ -305,6 +315,42 @@ with three parts:
   lines** and flagged in the report — they cannot participate in playback.
   Each `<trkseg>` becomes its own feature (gaps are never bridged), and
   `<wpt>` waypoints become static points with name/desc popups.
+
+### Multi-search (`showSearch`, default off)
+
+A collapsible search control that searches the **label texts** (popup content)
+of the configured element types — background nodes by default. Its model is
+*find all*, word-processor style: **every occurrence is a hit, duplicates
+included** (list-style searchers that key results by text silently drop
+duplicates — this one exists because that model can't represent them).
+
+- Type to see the hit count (`3 处`) and the matching rows; **Enter / ▶ /
+  ◀ cycle through the hits with wraparound**, panning to each record and
+  opening its popup. Clicking a row jumps straight to that hit.
+- **Cluster-aware**: a hit that is currently inside a cluster bubble is
+  revealed with `zoomToShowLayer` first, then its popup opens.
+- Matching is case-insensitive substring; a pulsing ring marks each hit.
+- The index refreshes itself when datasets change or the background nodes are
+  re-rendered (cluster/scatter switch).
+- Esc clears the query; Esc again collapses the control.
+
+The engine is deliberately standalone-shaped (`leaflet-multisearch`): the
+control consumes a generic records contract and knows nothing about this
+plugin's data model — it is designed to be extractable and published as an
+independent Leaflet plugin, with TrackReplay keeping only a thin adapter.
+
+```javascript
+L.trackReplay(map, data, {
+  showSearch: true,
+  searchElements: ['background_nodes'], // widen to ['background_nodes', 'events', …]
+  searchZoom: 17,
+});
+
+// the pure engine is available on its own (no Leaflet, no DOM):
+var idx = L.TrackReplay.Core.SearchIndex.createSearchIndex();
+idx.set([{ text: '基站 #24 在线设备 7', ref: { id: 24 } }, { text: '基站 #24 在线设备 7', ref: { id: 99 } }]);
+idx.search('基站 #24');   // → { total: 2, matches: [ … ] }  ← duplicates are separate hits
+```
 
 ### TimestampEdgeoJSON Format
 
@@ -634,6 +680,7 @@ require network access.
 │   ├── core/
 │   │   ├── DataParser.js       # GeoJSON parsing & processing
 │   │   ├── DatasetContainer.js # Runtime datasets (add/remove/clear/merge)
+│   │   ├── SearchIndex.js      # Multi-occurrence text index (leaflet-multisearch engine)
 │   │   ├── ColorMapper.js      # Speed-to-color mapping
 │   │   ├── TimeEngine.js       # Shared time-axis engine
 │   │   └── LayerTreeBuilder.js # Layer tree construction
@@ -653,6 +700,7 @@ require network access.
 │   │   ├── InfoLabels.js       # Batch label display
 │   │   ├── ClusterScatterControl.js # Cluster/scatter settings panel
 │   │   ├── DataSourceControl.js# Datasets list + import panel (file/drop/paste/URL/samples)
+│   │   ├── SearchControl.js    # Multi-search UI (leaflet-multisearch, extractable)
 │   │   └── ColorLegend.js      # Speed color legend
 │   └── utils/
 │       ├── GeoUtils.js          # Distance, bearing, interpolation

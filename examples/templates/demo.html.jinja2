@@ -471,6 +471,25 @@
         },
         rowMeta: function (d) { return d.featureCount + ' 个要素'; },
       },
+      // Multi-search (leaflet-multisearch): searches the background nodes'
+      // label texts — every occurrence is a hit (duplicates included), with
+      // a hit count and Enter / ◀ / ▶ cycling that opens each node's popup
+      showSearch: true,
+      searchPosition: 'topleft',
+      searchElements: ['background_nodes'],
+      searchZoom: 17,
+      searchLabels: {
+        open: '搜索',
+        placeholder: '搜索背景节点…',
+        prev: '上一个',
+        next: '下一个',
+      },
+      searchMessages: {
+        count: function (n) { return n + ' 处'; },
+        of: function (i, n) { return i + '/' + n; },
+        more: function (shown, total) { return '… 显示前 ' + shown + ' 条，共 ' + total + ' 处'; },
+        empty: function () { return '无匹配'; },
+      },
       dataSourceSamples: [
         { label: '示例轨迹', data: function () {
             var t0 = Date.now(), coords = [], times = [];

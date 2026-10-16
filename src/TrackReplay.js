@@ -15,6 +15,7 @@ import { createColorMapper } from './core/ColorMapper.js';
 import { createTimeEngine } from './core/TimeEngine.js';
 import { createLayerControl } from './core/LayerTreeBuilder.js';
 import { createDatasetContainer } from './core/DatasetContainer.js';
+import { createSearchIndex } from './core/SearchIndex.js';
 
 import { createTrackLayer } from './layers/TrackLayer.js';
 import { createPointClusterLayer } from './layers/PointClusterLayer.js';
@@ -32,6 +33,7 @@ import { createElementToggles } from './controls/ElementToggles.js';
 import { createInfoLabels } from './controls/InfoLabels.js';
 import { createClusterScatterControl } from './controls/ClusterScatterControl.js';
 import { createDataSourceControl } from './controls/DataSourceControl.js';
+import { createSearchControl, plainText } from './controls/SearchControl.js';
 
 import { wgs84ToGcj02, gcj02ToWgs84, outOfChina } from './utils/GCJ02.js';
 import { parseGPX } from './utils/GPX.js';
@@ -39,6 +41,44 @@ import { createEventBus } from './utils/EventBus.js';
 
 /** Playback events re-emitted on the session bus (forwarded per build). */
 var PLAYBACK_EVENTS = ['start', 'pause', 'stop', 'finished', 'tick', 'timechange', 'speedchange'];
+
+/**
+ * Adapter: TrackReplay's layer model → leaflet-multisearch's generic records
+ * contract. Every labelled leaf layer (one with a bound popup) of the selected
+ * element types becomes a record; its popup text is the searchable string and
+ * `meta` carries the labels used to build a result row.
+ */
+function collectSearchRecords(allLayers, elementKeys) {
+  var out = [];
+  var keys = Object.keys(allLayers || {});
+
+  for (var i = 0; i < keys.length; i++) {
+    var owner = allLayers[keys[i]];
+    var objectLabel = owner.layerPath ? owner.layerPath.join(' › ') : keys[i];
+
+    for (var j = 0; j < owner.elements.length; j++) {
+      var el = owner.elements[j];
+      if (elementKeys.indexOf(el.key) < 0) { continue; }
+      if (!el.layer || typeof el.layer.eachLayer !== 'function') { continue; }
+
+      el.layer.eachLayer(function (leaf) {
+        if (typeof leaf.getPopup !== 'function') { return; }
+        var popup = leaf.getPopup();
+        if (!popup) { return; }
+        var text = plainText(popup.getContent());
+        if (!text) { return; }
+        out.push({
+          text: text,
+          layer: leaf,
+          group: el.layer,
+          meta: { objectLabel: objectLabel, elementLabel: el.label },
+        });
+      });
+    }
+  }
+
+  return out;
+}
 
 /**
  * Internal builder — assembles one complete replay (layers, controls, time
@@ -123,7 +163,20 @@ var PLAYBACK_EVENTS = ['start', 'pause', 'stop', 'finished', 'tick', 'timechange
  * @param {Object} [options.dataSourceLabels]   - panel UI strings
  * @param {Object} [options.dataSourceMessages] - text builders
  *        ({ added, degraded, empty, error, rowMeta })
- * @param {Object[]} [options.dataSourceSamples] - [{ label, data }] samples
+ * @param {Object} [options.dataSourceSamples] - [{ label, data }] samples
+ * @param {boolean} [options.showSearch=false] - (session-level) show the
+ *        multi-search control (leaflet-multisearch): searches the label texts
+ *        of `searchElements` — every occurrence is a hit, duplicates
+ *        included — with a hit count and Enter / ◀ / ▶ cycling that pans to
+ *        the record and opens its popup (cluster-aware)
+ * @param {string} [options.searchPosition='topleft'] - control corner
+ * @param {string[]} [options.searchElements=['background_nodes']] - element
+ *        types included in the search index
+ * @param {number} [options.searchZoom] - setView zoom for each jump
+ *        (omit to pan while keeping the current zoom)
+ * @param {Object} [options.searchLabels]   - UI strings ({ open, placeholder,
+ *        prev, next })
+ * @param {Object} [options.searchMessages] - texts ({ count, of, more, empty })
  * @returns {Object} internal handle
  */
 function buildReplay(map, featureCollection, options, initialCluster) {
@@ -509,6 +562,10 @@ function buildReplay(map, featureCollection, options, initialCluster) {
     }
 
     rebuildLayerControl();
+
+    // The rebuilt layers invalidate anything that indexes them (the
+    // multi-search control rebuilds its index lazily on the next query).
+    if (handle && handle._onLayerRebuild) { handle._onLayerRebuild(); }
   }
 
   if (backgroundEntries.length && options.showClusterScatterControl !== false) {
@@ -876,6 +933,9 @@ export function trackReplay(map, dataOrArray, options) {
     currentBuild = buildReplay(map, container.mergedFeatureCollection(), options,
       snap ? snap.cluster : undefined);
     currentBuild._onLayerControlChange = function (lc) { instance.layerControl = lc; };
+    currentBuild._onLayerRebuild = function () {
+      if (instance.searchControl) { instance.searchControl.refresh(); }
+    };
     bindEngineEvents(currentBuild);
     if (snap) { applyState(currentBuild, snap); }
     syncFields();
@@ -885,6 +945,7 @@ export function trackReplay(map, dataOrArray, options) {
     map: map,
     datasets: container,
     dataSourceControl: null,
+    searchControl: null,
     dataDatum: options.dataDatum || 'wgs84',
     mapDatum: options.mapDatum || 'wgs84',
 
@@ -1028,6 +1089,10 @@ export function trackReplay(map, dataOrArray, options) {
         map.removeControl(instance.dataSourceControl);
       }
       instance.dataSourceControl = null;
+      if (instance.searchControl && instance.searchControl._map) {
+        map.removeControl(instance.searchControl);
+      }
+      instance.searchControl = null;
       container.clear();
       syncFields();
       bus.clear();
@@ -1068,6 +1133,36 @@ export function trackReplay(map, dataOrArray, options) {
     bus.on('datasetsclear', refreshDataSource);
   }
 
+  // ---- Session-level multi-search control (leaflet-multisearch) ----
+  // Searches the label texts of the configured element types (default:
+  // background nodes). Every occurrence is a hit — duplicates included —
+  // with a total count and Enter / prev / next cycling (wraparound) that
+  // pans to the record and opens its popup.
+  if (options.showSearch) {
+    var searchElementKeys = options.searchElements || ['background_nodes'];
+    instance.searchControl = createSearchControl({
+      position: options.searchPosition || 'topleft',
+      zoom: options.searchZoom || null,
+      labels: options.searchLabels,
+      messages: options.searchMessages,
+      records: function () {
+        return collectSearchRecords(instance.allLayers, searchElementKeys);
+      },
+      formatResult: function (m) {
+        var meta = m.record && m.record.meta;
+        return meta ? meta.objectLabel + ' · ' + m.text : m.text;
+      },
+    });
+    map.addControl(instance.searchControl);
+
+    var refreshSearch = function () {
+      if (instance.searchControl) { instance.searchControl.refresh(); }
+    };
+    bus.on('datasetadd', refreshSearch);
+    bus.on('datasetremove', refreshSearch);
+    bus.on('datasetsclear', refreshSearch);
+  }
+
   return instance;
 }
 
@@ -1084,6 +1179,7 @@ if (typeof L !== 'undefined') {
     TimeEngine: { createTimeEngine: createTimeEngine },
     LayerTreeBuilder: { createLayerControl: createLayerControl },
     DatasetContainer: { createDatasetContainer: createDatasetContainer },
+    SearchIndex: { createSearchIndex: createSearchIndex },
   };
 
   L.TrackReplay.Layers = {
@@ -1105,6 +1201,7 @@ if (typeof L !== 'undefined') {
     InfoLabels: { createInfoLabels: createInfoLabels },
     ClusterScatterControl: { createClusterScatterControl: createClusterScatterControl },
     DataSourceControl: { createDataSourceControl: createDataSourceControl },
+    SearchControl: { createSearchControl: createSearchControl, plainText: plainText },
   };
 
   L.TrackReplay.Utils = {

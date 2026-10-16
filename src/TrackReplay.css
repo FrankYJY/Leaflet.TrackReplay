@@ -579,6 +579,143 @@
   pointer-events: none;
 }
 
+/* ---- Multi-search (leaflet-multisearch) ----
+   Self-contained block with its own namespace: designed to be extracted
+   verbatim into the standalone leaflet-multisearch plugin. */
+.leaflet-multisearch {
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+}
+
+.leaflet-multisearch .lms-toggle {
+  display: block;
+  background: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 5px 8px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.leaflet-multisearch .lms-toggle:hover {
+  background: #f4f4f4;
+}
+
+.leaflet-multisearch.lms-open .lms-toggle {
+  display: none;
+}
+
+.leaflet-multisearch .lms-box {
+  display: none;
+  padding: 6px 8px;
+}
+
+.leaflet-multisearch.lms-open .lms-box {
+  display: block;
+}
+
+.leaflet-multisearch .lms-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.leaflet-multisearch .lms-input {
+  width: 180px;
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  outline: none;
+}
+
+.leaflet-multisearch .lms-input:focus {
+  border-color: #3388ff;
+}
+
+.leaflet-multisearch .lms-nav {
+  background: #f4f4f4;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.leaflet-multisearch .lms-nav:hover {
+  background: #e4e4e4;
+}
+
+.leaflet-multisearch .lms-count {
+  color: #888;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.leaflet-multisearch .lms-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border-top: 1px solid #eee;
+  margin-top: 4px;
+}
+
+.leaflet-multisearch .lms-item {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: #555;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+
+.leaflet-multisearch .lms-item:hover,
+.leaflet-multisearch .lms-item.lms-active {
+  background: #e8f0fe;
+  color: #222;
+}
+
+.leaflet-multisearch .lms-item b {
+  color: #3388ff;
+}
+
+.leaflet-multisearch .lms-more {
+  color: #aaa;
+  font-size: 10px;
+  padding: 2px 4px;
+}
+
+/* pulse ring shown briefly at a searched hit */
+.lms-flash {
+  border: 3px solid #3388ff;
+  border-radius: 50%;
+  box-sizing: border-box;
+  pointer-events: none;
+  animation: lms-flash 1.5s ease-out forwards;
+}
+
+@keyframes lms-flash {
+  0% { transform: scale(0.4); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.leaflet-container.dark .leaflet-multisearch,
+.leaflet-container.dark .leaflet-multisearch .lms-toggle {
+  background: #2a2a2a;
+  color: #ddd;
+}
+
+.leaflet-container.dark .leaflet-multisearch .lms-input {
+  background: #333;
+  border-color: #555;
+  color: #ddd;
+}
+
 /* ---- Moving Indicator ---- */
 .leaflet-trackreplay-indicator,
 .leaflet-trackreplay-indicator.leaflet-interactive {
