@@ -170,6 +170,8 @@ out.searchEscClosed = await page.evaluate(() =>
 // ---- 5. data source textarea: typing never touches playback ----
 phase = 'textarea';
 const beforeText = await snap();
+await page.locator('.leaflet-trackreplay-datasource .tr-ds-title').click(); // panel is collapsed by default
+await page.waitForTimeout(200);
 await page.locator('.leaflet-trackreplay-datasource .tr-ds-paste').click();
 await page.keyboard.type('4r8');
 out.textareaTyping = await page.evaluate((b) => ({

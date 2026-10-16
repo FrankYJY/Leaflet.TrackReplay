@@ -119,6 +119,22 @@ await page.locator(PANEL + ' .lms-item').first().click();
 await page.waitForTimeout(700);
 out.rowClick = await state();
 
+// ---- 3b. close button collapses; reopening restores query + results ----
+phase = 'close button';
+await page.locator(PANEL + ' .lms-close').click();
+await page.waitForTimeout(200);
+out.afterCloseBtn = await page.evaluate((sel) => ({
+  open: document.querySelector(sel).classList.contains('lms-open'),
+}), PANEL);
+await page.locator(PANEL + ' .lms-toggle').click();
+await page.waitForTimeout(400);
+out.afterReopen = await page.evaluate((sel) => ({
+  open: document.querySelector(sel).classList.contains('lms-open'),
+  inputValue: document.querySelector(sel + ' .lms-input').value,
+  rows: document.querySelectorAll(sel + ' .lms-item').length,
+  listVisible: document.querySelector(sel + ' .lms-list').style.display !== 'none',
+}), PANEL);
+
 // ---- 4. case-insensitive ----
 phase = 'case';
 await input.fill('gps');
@@ -172,6 +188,8 @@ out.afterClear = await state();
 
 // ---- 9. re-add via a sample button -> index finds it again ----
 phase = 'refresh on add';
+await page.locator('.leaflet-trackreplay-datasource .tr-ds-title').click(); // panel is collapsed by default
+await page.waitForTimeout(200);
 await page.locator('.leaflet-trackreplay-datasource .tr-ds-sample').nth(1).click(); // 示例采样点
 await page.waitForTimeout(800);
 await input.fill('示例采样点');

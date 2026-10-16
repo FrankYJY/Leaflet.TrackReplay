@@ -73,7 +73,7 @@ const listState = () => page.evaluate((sel) => ({
   report: document.querySelector(sel + ' .tr-ds-report').innerText,
 }), PANEL);
 
-// ---- A. structure + initial list (demo opens expanded, 1 dataset) ----
+// ---- A. structure + initial list (collapsed by default, 1 dataset) ----
 phase = 'A structure';
 out.structure = await page.evaluate((sel) => {
   const el = document.querySelector(sel);
@@ -86,6 +86,8 @@ out.structure = await page.evaluate((sel) => {
     samples: [...el.querySelectorAll('.tr-ds-sample')].map((b) => b.textContent),
   };
 }, PANEL);
+await page.locator(PANEL + ' .tr-ds-title').click(); // collapsed by default — open it
+await page.waitForTimeout(200);
 out.initialList = await listState();
 
 // ---- B. import channels ----

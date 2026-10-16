@@ -23,6 +23,7 @@ import { createSearchIndex } from '../core/SearchIndex.js';
 
 var DEFAULT_LABELS = {
   open: 'Search',
+  close: 'Collapse',
   placeholder: 'Search…',
   prev: 'Previous',
   next: 'Next',
@@ -158,6 +159,12 @@ export function createSearchControl(options) {
 
       this._countEl = L.DomUtil.create('span', 'lms-count', row);
 
+      var closeBtn = L.DomUtil.create('button', 'lms-nav lms-close', row);
+      closeBtn.type = 'button';
+      closeBtn.title = labels.close;
+      closeBtn.textContent = '✕';
+      closeBtn.onclick = function () { self._close(); };
+
       this._listEl = L.DomUtil.create('div', 'lms-list', box);
       this._listEl.style.display = 'none';
 
@@ -213,6 +220,8 @@ export function createSearchControl(options) {
     _open: function () {
       L.DomUtil.addClass(this._container, 'lms-open');
       this._input.focus();
+      // reopening with an existing query restores its results
+      if (this._input.value) { this._search(this._input.value, true); }
     },
 
     _close: function () {
