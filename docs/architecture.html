@@ -1,0 +1,464 @@
+<title>Leaflet.TrackReplay 架构</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* ---- design tokens -------------------------------------------------
+     两套"意义色"沿用插件自己的语言：蓝 = 会话/身份，橙 = 时间轴/播放；
+     其余中性色偏冷（和地图、海蓝的底子一致）。
+     布局：单栏，最大 1000px，图各自横向可滚（窄屏不缩成一团）。        */
+  :root {
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --surface-2: #eaeef4;
+    --fg: #16191e;
+    --muted: #5c6673;
+    --line: #d7dde6;
+    --line-strong: #b6c0cd;
+    --accent: #2f6fe0;        /* 会话 / 身份 */
+    --accent-soft: #e8f0fd;
+    --warm: #c9541a;          /* 时间轴 / 播放 */
+    --warm-soft: #fdeee3;
+    --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101317;
+      --surface: #171b21;
+      --surface-2: #1e242c;
+      --fg: #e5e9ef;
+      --muted: #98a3b2;
+      --line: #2a313a;
+      --line-strong: #3b4552;
+      --accent: #6ba3f7;
+      --accent-soft: #1a2436;
+      --warm: #ef8a4c;
+      --warm-soft: #2c2017;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101317;
+    --surface: #171b21;
+    --surface-2: #1e242c;
+    --fg: #e5e9ef;
+    --muted: #98a3b2;
+    --line: #2a313a;
+    --line-strong: #3b4552;
+    --accent: #6ba3f7;
+    --accent-soft: #1a2436;
+    --warm: #ef8a4c;
+    --warm-soft: #2c2017;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding-block: 40px 64px;
+    padding-inline: 20px;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+
+  header { display: grid; gap: 10px; padding-bottom: 26px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+    font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+  }
+  h1 { margin: 0; font-size: 30px; line-height: 1.25; font-weight: 600; text-wrap: balance; }
+  .lede { margin: 0; max-width: 62ch; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+  .legend b { color: var(--fg); font-weight: 500; }
+  .key { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; border: 1.5px solid var(--line-strong); }
+  .swatch.s-accent { border-color: var(--accent); background: var(--accent-soft); }
+  .swatch.s-warm { border-color: var(--warm); background: var(--warm-soft); }
+
+  section { padding-top: 40px; }
+  h2 { margin: 0 0 6px; font-size: 21px; font-weight: 600; }
+  h2 + p { margin: 0 0 18px; max-width: 66ch; color: var(--muted); }
+
+  figure { margin: 0 0 18px; }
+  .canvas {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  svg { display: block; width: 100%; height: auto; min-width: 700px; }
+  svg.narrow { min-width: 520px; }
+  figcaption { margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+  ul.notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+  ul.notes li { display: grid; grid-template-columns: max-content 1fr; gap: 10px; font-size: 14px; }
+  ul.notes .t {
+    font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+    font-size: 12.5px; color: var(--fg);
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 5px; padding: 1px 7px; height: max-content; white-space: nowrap;
+  }
+  ul.notes .d { color: var(--muted); }
+  @media (max-width: 560px) {
+    ul.notes li { grid-template-columns: 1fr; gap: 3px; }
+  }
+
+  footer {
+    margin-top: 46px; padding-top: 22px; border-top: 1px solid var(--line);
+    display: grid; gap: 14px; font-size: 13.5px; color: var(--muted);
+  }
+  footer h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--fg); }
+  footer .row { display: grid; gap: 4px; }
+  code, .mono { font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace; font-size: 12.5px; }
+
+  /* ---- svg text roles ---- */
+  svg .t { font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 13px; font-weight: 600; fill: var(--fg); }
+  svg .b { font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 11.5px; font-weight: 600; fill: var(--fg); }
+  svg .s { font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 10.5px; fill: var(--muted); }
+  svg .m { font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace; font-size: 11px; fill: var(--fg); }
+  svg .ms { font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace; font-size: 10px; fill: var(--muted); }
+  svg .al { font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 10.5px; fill: var(--muted); }
+  svg .box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+  svg .box2 { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; }
+  svg .grp { fill: none; stroke: var(--line-strong); stroke-width: 1.1; stroke-dasharray: 5 4; }
+  svg .acc { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; }
+  svg .wrm { fill: var(--warm-soft); stroke: var(--warm); stroke-width: 1.6; }
+  svg .flow { stroke: var(--line-strong); stroke-width: 1.4; fill: none; }
+  svg .flowa { stroke: var(--accent); stroke-width: 1.6; fill: none; }
+  svg .floww { stroke: var(--warm); stroke-width: 1.6; fill: none; }
+  svg .dash { stroke: var(--line-strong); stroke-width: 1.3; stroke-dasharray: 4 4; fill: none; }
+  svg .k { fill: var(--accent); }
+  svg .kw { fill: var(--warm); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">架构速览 · 三张图</div>
+    <h1>时间轴对齐的批量数据回放，怎么搭起来的</h1>
+    <p class="lede">
+      三张图分别回答三个问题：<b>谁依赖谁</b>、<b>一份数据从哪来、经过谁、到哪去</b>、
+      <b>增删一个数据集时到底发生了什么</b>。所有标注都对应仓库里的真实模块名与选项名。
+    </p>
+    <div class="legend">
+      <span class="key"><span class="swatch s-accent"></span><b>蓝</b>&nbsp;会话 / 身份（跨重建不变的那一层）</span>
+      <span class="key"><span class="swatch s-warm"></span><b>橙</b>&nbsp;时间轴 / 播放（驱动每帧的那一层）</span>
+    </div>
+  </header>
+
+  <!-- ============================ 图 1 ============================ -->
+  <section id="layers">
+    <h2>分层总览</h2>
+    <p>从上到下是依赖方向：宿主页面只认识一个门面，门面持有"跨重建不变"的三样东西，
+      真正的构建器每次数据变化被整体替换，最底下是 Leaflet 与两个可降级的可选插件。</p>
+
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 880 700" role="img" aria-label="分层总览：宿主页面调用会话门面，门面在数据变化时重建 buildReplay；构建器内部 core 解析、layers 渲染、TimeEngine 驱动、controls 指挥；utils 被各层共用；全部绘制最终落在 Leaflet。">
+          <defs>
+            <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- 宿主 -->
+          <rect class="box" x="20" y="20" width="840" height="54" rx="8"/>
+          <text class="b" x="36" y="42">宿主页面 · demo.html.jinja2（或你自己的应用）</text>
+          <text class="s" x="36" y="60">建地图与底图 · 设置面板 · 注入 options：labels / messages / calendar / displayTimeZone</text>
+
+          <line class="flow" x1="440" y1="74" x2="440" y2="94" marker-end="url(#ar1)" color="currentColor"/>
+          <text class="al" x="452" y="88">L.trackReplay(map, data, options)</text>
+
+          <!-- 门面 -->
+          <rect class="acc" x="20" y="96" width="840" height="92" rx="8"/>
+          <text class="b" x="36" y="118">L.trackReplay — 会话门面（公开对象、监听器跨重建不变）</text>
+          <rect class="box" x="36" y="128" width="252" height="48" rx="6"/>
+          <text class="m" x="48" y="147">core/DatasetContainer</text>
+          <text class="s" x="48" y="164">一次 add = 一个数据集（增删的原子单位）</text>
+          <rect class="box" x="300" y="128" width="252" height="48" rx="6"/>
+          <text class="m" x="312" y="147">统一事件总线 on / off</text>
+          <text class="s" x="312" y="164">播放事件 + 数据集事件同一条</text>
+          <rect class="box" x="564" y="128" width="280" height="48" rx="6"/>
+          <text class="m" x="576" y="147">会话级控件（重建不销毁）</text>
+          <text class="s" x="576" y="164">数据源面板 · 多命中搜索</text>
+
+          <line class="flowa" x1="400" y1="188" x2="400" y2="210" marker-end="url(#ar1)" color="currentColor"/>
+          <text class="al" x="392" y="203" text-anchor="end">数据变化 → 重建</text>
+          <line class="dash" x1="470" y1="210" x2="470" y2="188" marker-end="url(#ar1)" color="currentColor"/>
+          <text class="al" x="478" y="203">返回 handle（当前一代）</text>
+
+          <!-- buildReplay -->
+          <rect class="box2" x="20" y="212" width="840" height="344" rx="8"/>
+          <text class="b" x="36" y="236">buildReplay — 内部构建器（每次数据集变化整体替换）</text>
+
+          <rect class="box" x="40" y="250" width="320" height="122" rx="6"/>
+          <text class="b" x="56" y="272">core/ · 解析与颜色</text>
+          <text class="m" x="56" y="294">DataParser</text>
+          <text class="s" x="150" y="294">长度校验 · 基准转换 · 算速度 · 拆段</text>
+          <text class="m" x="56" y="316">ColorMapper</text>
+          <text class="s" x="150" y="316">速度 → 颜色（fixed / adaptive / custom）</text>
+          <text class="m" x="56" y="338">LayerTreeBuilder</text>
+          <text class="s" x="184" y="338">图层树 + 底图单选组</text>
+          <text class="s" x="56" y="360">core/DatasetPreview 服务于预览与导出，不在这一列</text>
+
+          <line class="flow" x1="362" y1="310" x2="516" y2="310" marker-end="url(#ar1)" color="currentColor"/>
+          <text class="al" x="439" y="302" text-anchor="middle">要素 + _trackMeta</text>
+
+          <rect class="box" x="520" y="250" width="320" height="122" rx="6"/>
+          <text class="b" x="536" y="272">layers/ · 渲染（每个对象拆成可独立开关的元素）</text>
+          <text class="m" x="536" y="294">TrackLayer · PointClusterLayer</text>
+          <text class="m" x="536" y="314">MovingIndicator · DynamicRoute</text>
+          <text class="m" x="536" y="334">StaticLayer · BackgroundNodesLayer</text>
+          <text class="s" x="536" y="356">元素：轨迹 / 节点 / 已行进 / 未行进 / 箭头 / 事件 / 静态 / 背景节点</text>
+
+          <rect class="wrm" x="300" y="392" width="280" height="54" rx="6"/>
+          <text class="m" x="314" y="413">core/TimeEngine</text>
+          <text class="s" x="314" y="431">共享时间轴：start / end 由数据决定</text>
+
+          <polyline class="floww" points="580,419 680,419 680,376" marker-end="url(#ar1)" color="currentColor"/>
+          <text class="al" x="688" y="402">tick / timechange</text>
+
+          <rect class="box" x="40" y="470" width="800" height="66" rx="6"/>
+          <text class="b" x="56" y="492">controls/ · 指挥与读数</text>
+          <text class="s" x="56" y="514">ControlBar（播放按钮 + 时间轴 + 日期行）· 批量显隐 · 批量标签 · 聚合散点 · 视角跟随 · 颜色图例</text>
+
+          <line class="floww" x1="400" y1="470" x2="400" y2="450" marker-end="url(#ar1)" color="currentColor"/>
+          <text class="al" x="392" y="462" text-anchor="end">play · seek · setSpeed</text>
+          <line class="floww" x1="480" y1="450" x2="480" y2="470" marker-end="url(#ar1)" color="currentColor"/>
+          <text class="al" x="488" y="462">tick（时间轴 / 日期行）</text>
+
+          <!-- utils -->
+          <line class="flow" x1="440" y1="556" x2="440" y2="570" marker-end="url(#ar1)" color="currentColor"/>
+          <rect class="grp" x="20" y="572" width="840" height="52" rx="8"/>
+          <text class="b" x="36" y="593">utils/ · 纯函数，被上面各层共用</text>
+          <text class="s" x="36" y="611">TimeZone · TimeUtils · GeoUtils · GCJ02 · GPX · EventBus</text>
+
+          <!-- leaflet -->
+          <line class="flow" x1="440" y1="624" x2="440" y2="642" marker-end="url(#ar1)" color="currentColor"/>
+          <text class="al" x="452" y="638">L.layer / L.control</text>
+          <rect class="box" x="20" y="644" width="840" height="44" rx="8"/>
+          <text class="b" x="36" y="664">Leaflet ^1.7 —— 唯一的硬依赖</text>
+          <text class="s" x="36" y="681">Leaflet.markercluster / Leaflet.Control.Layers.Tree 缺失时自动降级：普通 FeatureGroup / 扁平图层列表</text>
+        </svg>
+      </div>
+      <figcaption>宿主只跟门面打交道；门面持有的三样东西决定了"为什么增删数据不会把界面状态也带走"。
+        每个对象（layerPath）展开成多个元素图层，是图层树、批量显隐、批量标签三处共用的一套粒度。</figcaption>
+    </figure>
+
+    <ul class="notes">
+      <li><span class="t">门面</span><span class="d">公开对象、<code>on()/off()</code> 总线、<code>setTimeZone()</code> / <code>setCalendar()</code> 都在这一层；重建只换内部 handle。</span></li>
+      <li><span class="t">会话级控件</span><span class="d">数据源面板与多命中搜索由门面创建，不随重建销毁——所以导入列表、展开状态、搜索索引都留得住。</span></li>
+      <li><span class="t">降级</span><span class="d">可选插件缺失时：轨迹点与背景节点退化为普通 <code>FeatureGroup</code>，图层树退化为扁平 <code>L.control.layers</code>；功能不报错，只是少了聚合与层级树。</span></li>
+      <li><span class="t">utils/TimeZone</span><span class="d">显示时区贯穿时间标签、双击编辑、日界线刻度、节假日查表键——四者永远读同一个 zone 对象。</span></li>
+    </ul>
+  </section>
+
+  <!-- ============================ 图 2 ============================ -->
+  <section id="journey">
+    <h2>一条数据的旅程</h2>
+    <p>从"你手里的数据"到"地图上会动的轨迹"只有一条主干；下面那组是并行服务——它们不受每帧驱动，
+      但决定时间轴怎么读、以及大数据的预览和导出怎么不把页面拖死。</p>
+
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 880 470" role="img" aria-label="数据旅程：来源与导入入口归一化后进入数据集容器，合并交给 DataParser 校验、转换、算速度并拆段，最后变成各元素图层绘到地图；TimeEngine 用 tick 驱动已行进、未行进、箭头、日期行与跟随；预览导出、时区、节假日作为并行服务。" width="880" height="470">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="grp" x="20" y="24" width="844" height="256" rx="8"/>
+          <text class="al" x="36" y="46">主干：数据 → 图层 → 共享时间轴驱动</text>
+
+          <!-- 五步 -->
+          <rect class="box" x="28" y="60" width="132" height="96" rx="6"/>
+          <text class="b" x="38" y="80">来源</text>
+          <text class="ms" x="38" y="100">convert.py</text>
+          <text class="ms" x="38" y="116">.geojson 文件</text>
+          <text class="ms" x="38" y="132">拖拽 / 粘贴 / URL</text>
+          <text class="ms" x="38" y="148">GPX · 内置样例</text>
+
+          <line class="flow" x1="160" y1="108" x2="197" y2="108" marker-end="url(#ar2)" color="currentColor"/>
+          <text class="al" x="178" y="100" text-anchor="middle">对象</text>
+
+          <rect class="box" x="201" y="60" width="132" height="96" rx="6"/>
+          <text class="b" x="211" y="80">导入面板</text>
+          <text class="ms" x="211" y="100">归一化</text>
+          <text class="ms" x="211" y="116">FC / Feature / 数组</text>
+          <text class="ms" x="211" y="132">补 layerPath</text>
+          <text class="ms" x="211" y="148">体量闸 5e7 字符</text>
+
+          <line class="flow" x1="333" y1="108" x2="370" y2="108" marker-end="url(#ar2)" color="currentColor"/>
+          <text class="al" x="351" y="100" text-anchor="middle">FC</text>
+
+          <rect class="box" x="374" y="60" width="132" height="96" rx="6"/>
+          <text class="b" x="384" y="80">数据集容器</text>
+          <text class="ms" x="384" y="100">一次 add</text>
+          <text class="ms" x="384" y="116">= 一个数据集</text>
+          <text class="ms" x="384" y="132">跨数据集同路径</text>
+          <text class="ms" x="384" y="148">自动合并</text>
+
+          <line class="flow" x1="506" y1="108" x2="543" y2="108" marker-end="url(#ar2)" color="currentColor"/>
+          <text class="al" x="524" y="100" text-anchor="middle">合并</text>
+
+          <rect class="box" x="547" y="60" width="132" height="96" rx="6"/>
+          <text class="b" x="557" y="80">DataParser</text>
+          <text class="ms" x="557" y="100">长度校验</text>
+          <text class="ms" x="557" y="116">基准换算</text>
+          <text class="ms" x="557" y="132">算速度 · 拆段</text>
+          <text class="ms" x="557" y="148">逐段 + _trackMeta</text>
+
+          <line class="flow" x1="679" y1="108" x2="716" y2="108" marker-end="url(#ar2)" color="currentColor"/>
+          <text class="al" x="697" y="100" text-anchor="middle">元素</text>
+
+          <rect class="box" x="720" y="60" width="132" height="96" rx="6"/>
+          <text class="b" x="730" y="80">图层 · 地图</text>
+          <text class="ms" x="730" y="100">轨迹 / 节点</text>
+          <text class="ms" x="730" y="116">事件 / 静态</text>
+          <text class="ms" x="730" y="132">背景节点</text>
+          <text class="ms" x="730" y="148">同一坐标系</text>
+
+          <!-- 时间轴 -->
+          <rect class="wrm" x="300" y="196" width="540" height="56" rx="6"/>
+          <text class="m" x="314" y="217">core/TimeEngine — 共享时间轴</text>
+          <text class="s" x="314" y="236">tick 驱动：已行进 / 未行进 / 箭头 / 日期行 / 视角跟随</text>
+          <line class="floww" x1="760" y1="196" x2="760" y2="162" marker-end="url(#ar2)" color="currentColor"/>
+          <text class="al" x="768" y="182">tick</text>
+
+          <!-- 并行服务 -->
+          <rect class="grp" x="20" y="300" width="844" height="150" rx="8"/>
+          <text class="al" x="36" y="322">并行服务：不受每帧驱动，但决定时间轴怎么读</text>
+
+          <rect class="box" x="28" y="334" width="270" height="100" rx="6"/>
+          <text class="b" x="42" y="356">预览与导出</text>
+          <text class="ms" x="42" y="376">点数据集行 → 摘要 + 截断 JSON</text>
+          <text class="ms" x="42" y="394">50 要素 / 2 万字符双上限</text>
+          <text class="ms" x="42" y="412">复制所显示部分 · 下载完整文件</text>
+          <text class="ms" x="42" y="430">超预算就中止并报告</text>
+
+          <rect class="box" x="316" y="334" width="276" height="100" rx="6"/>
+          <text class="b" x="330" y="356">显示时区</text>
+          <text class="ms" x="330" y="376">时间标签 · 双击编辑</text>
+          <text class="ms" x="330" y="394">日界线刻度</text>
+          <text class="ms" x="330" y="412">节假日查表键按它算</text>
+          <text class="ms" x="330" y="430">local / UTC+8 / IANA 名</text>
+
+          <rect class="box" x="610" y="334" width="246" height="100" rx="6"/>
+          <text class="b" x="624" y="356">节假日（宿主抓取）</text>
+          <text class="ms" x="624" y="376">chinese-days 年度 JSON</text>
+          <text class="ms" x="624" y="394">按年存 localStorage</text>
+          <text class="ms" x="624" y="412">setCalendar() 注入</text>
+          <text class="ms" x="624" y="430">日期行显示字段名 + 原值</text>
+        </svg>
+      </div>
+      <figcaption>主干上每一步的产物都能对上一段代码：归一化在导入面板、合并发生在每次重建、
+        拆段与 <code>_trackMeta</code> 在 DataParser。并行服务里的三件事都只为"读得对/看得动"服务，不影响回放本身。</figcaption>
+    </figure>
+
+    <ul class="notes">
+      <li><span class="t">一处转换</span><span class="d">坐标基准（dataDatum → mapDatum）只在 DataParser 里发生一次，之后所有图层、插值、方位角都在同一坐标系里算。</span></li>
+      <li><span class="t">拆段的触发</span><span class="d">逐段样式、逐段弹窗、逐点弹窗任一存在，或整条没有基础样式时，才会拆成逐段 Feature；否则整条保留为一个要素。</span></li>
+      <li><span class="t">不变量</span><span class="d"><code>times</code> 长度 = 坐标点数；<code>speeds / styles / popups</code> = 点数 − 1；<code>pointPopups</code> = 点数。写错长度是静默失败的主要来源。</span></li>
+      <li><span class="t">护栏</span><span class="d">导入有体量闸、预览有双上限、导出有字符与时间双预算；三者都选择"中止并报告"而不是让页面卡死。</span></li>
+    </ul>
+  </section>
+
+  <!-- ============================ 图 3 ============================ -->
+  <section id="rebuild">
+    <h2>一次 rebuild 的生命周期</h2>
+    <p>增删数据集不是"往地图上加东西"，而是<b>先留住状态、拆掉当前这一代、用合并后的数据重造、再把状态放回去</b>。
+      这张图就是那四步。</p>
+
+    <figure>
+      <div class="canvas">
+        <svg class="narrow" viewBox="0 0 760 690" role="img" aria-label="重建生命周期：数据集变化先 captureState 快照，再 destroy 当前一代的图层控件监听，然后用合并数据 buildReplay，最后 applyState 恢复倍速循环显隐标签跟随折叠并 seek 回原时刻；用户视角只看到地图内容更新。">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="box" x="60" y="28" width="640" height="54" rx="8"/>
+          <text class="b" x="76" y="50">触发</text>
+          <text class="m" x="76" y="68">addDataset() · removeDataset() · clearDatasets()</text>
+
+          <line class="flow" x1="320" y1="82" x2="320" y2="106" marker-end="url(#ar3)" color="currentColor"/>
+          <text class="al" x="332" y="99">① 留住用户看到的状态</text>
+
+          <rect class="box" x="60" y="110" width="640" height="96" rx="8"/>
+          <text class="b" x="76" y="132">captureState()</text>
+          <text class="ms" x="76" y="154">时刻 · 运行态 · 倍速 · 循环</text>
+          <text class="ms" x="76" y="174">逐元素显隐 · 批量标签勾选</text>
+          <text class="ms" x="76" y="194">聚合 / 散点 · 跟随模式 · 面板折叠</text>
+          <text class="s" x="420" y="154">这些是"用户视角"的全部</text>
+          <text class="s" x="420" y="174">重建之后要逐项放回去；</text>
+          <text class="s" x="420" y="194">时间越界时 seek 会 clamp 到边界</text>
+
+          <line class="flow" x1="320" y1="206" x2="320" y2="230" marker-end="url(#ar3)" color="currentColor"/>
+          <text class="al" x="332" y="223">② 只拆当前这一代</text>
+
+          <rect class="box" x="60" y="234" width="640" height="84" rx="8"/>
+          <text class="b" x="76" y="256">destroy()</text>
+          <text class="s" x="76" y="278">图层 · 控件 · 监听 · 定时器，全部拆掉</text>
+          <text class="s" x="76" y="298">门面持有的三样不动：数据集容器 · 事件总线 · 会话级控件</text>
+
+          <line class="flow" x1="320" y1="318" x2="320" y2="342" marker-end="url(#ar3)" color="currentColor"/>
+          <text class="al" x="332" y="335">③ 用合并后的数据重造</text>
+
+          <rect class="acc" x="60" y="346" width="640" height="72" rx="8"/>
+          <text class="m" x="76" y="370">buildReplay(合并后的 FeatureCollection, options,</text>
+          <text class="m" x="76" y="390">{ timeZone, calendar })</text>
+          <text class="s" x="420" y="370">时区与节假日表是会话级的，</text>
+          <text class="s" x="420" y="390">重建后原样交给新一代</text>
+
+          <line class="flow" x1="320" y1="418" x2="320" y2="442" marker-end="url(#ar3)" color="currentColor"/>
+          <text class="al" x="332" y="435">④ 把快照放回去</text>
+
+          <rect class="box" x="60" y="446" width="640" height="122" rx="8"/>
+          <text class="b" x="76" y="468">applyState()</text>
+          <text class="ms" x="76" y="490">倍速 · 循环</text>
+          <text class="ms" x="76" y="510">→ 逐元素显隐</text>
+          <text class="ms" x="76" y="530">→ 标签勾选（弹窗随之重开）</text>
+          <text class="ms" x="76" y="550">→ 跟随模式 · 面板折叠</text>
+          <text class="ms" x="420" y="490">→ seek(时刻)，越界 clamp</text>
+          <text class="ms" x="420" y="510">→ 原本在播就继续 play()</text>
+          <text class="s" x="420" y="530">顺序有意义：显隐与标签先恢复，</text>
+          <text class="s" x="420" y="550">时刻最后落，避免中间态闪一下</text>
+
+          <rect class="acc" x="60" y="594" width="640" height="72" rx="8"/>
+          <text class="b" x="76" y="617">用户视角</text>
+          <text class="s" x="76" y="640">地图内容更新了，而对象身份、监听器、视图状态都没变 —— 这正是"会话"这一层存在的理由</text>
+        </svg>
+      </div>
+      <figcaption>四步的顺序不能换：先快照再拆（否则状态随图层一起消失）、先恢复显隐再落时刻（否则隐藏的图层会先闪一下）。
+        会话级的一切都不参与这轮循环。</figcaption>
+    </figure>
+
+    <ul class="notes">
+      <li><span class="t">为什么拆得干净</span><span class="d">每一代 <code>buildReplay</code> 返回自己的 handle（引擎、图层、控件、路由、指示器）；门面只把 handle 换掉，旧的那一代连同它的定时器与监听一起消失。</span></li>
+      <li><span class="t">跨数据集的对象</span><span class="d">同一 <code>layerPath</code> 的要素在容器里合并，所以"删掉一份数据"后，跨数据集的对象保留剩余部分，独属它的对象整体消失。</span></li>
+      <li><span class="t">空会话</span><span class="d">没有数据时不构建（没有控件）；第一份数据触发构建；<code>clearDatasets()</code> 回到空态且可继续使用，<code>destroy()</code> 才是整体拆除。</span></li>
+    </ul>
+  </section>
+
+  <footer>
+    <div class="row">
+      <h3>关键文件</h3>
+      <div class="mono">src/TrackReplay.js（门面 + 构建器）· src/core/（容器 · 解析 · 颜色 · 时间引擎 · 预览 · 搜索索引）</div>
+      <div class="mono">src/layers/ · src/controls/ · src/utils/（TimeZone · GCJ02 · GPX …）· examples/（demo 服务器 · Python 转换器）</div>
+    </div>
+    <div class="row">
+      <h3>验证</h3>
+      <div>11 个 Playwright 端到端检查脚本（<span class="mono">_smoke_run · _keys_check · _datasets_check · _data_source_check · _background_nodes_check · _popup_labels_check · _search_check · _settings_check · _preview_check · _viewfollow_check · _dateline_check</span>），
+        手动 <span class="mono">node _xxx_check.mjs</span>（前置：<span class="mono">npm run build</span> + demo 服务器在 :8000）。</div>
+    </div>
+    <div class="row">
+      <h3>依赖</h3>
+      <div>运行时只有 Leaflet（peer ^1.7）；markercluster 与 Layers.Tree 可选且自动降级。其余一切（导入、预览、搜索、时区、节假日、控件）都是仓库内的自研代码。</div>
+    </div>
+  </footer>
+</div>

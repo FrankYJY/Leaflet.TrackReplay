@@ -5,6 +5,17 @@
 [![npm version](https://img.shields.io/npm/v/leaflet-trackreplay.svg)](https://www.npmjs.com/package/leaflet-trackreplay)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+**English** | [简体中文](docs/README.zh-CN.md)
+
+## Documentation
+
+- **Human usage guide** — [中文](docs/HUMAN-USAGE.zh.md) · [English](docs/HUMAN-USAGE.en.md): install, produce data, common configuration, troubleshooting.
+- **LLM prompt pack** — [中文](docs/LLM-PROMPT.zh.md) · [English](docs/LLM-PROMPT.en.md): a self-contained spec to paste together with your own requirement, so another model can generate valid data or integration code without reading this repo.
+- **Python host guide** — [中文](docs/python-host/GUIDE.zh.md) · [English](docs/python-host/GUIDE.en.md): build a FastAPI/Jinja2 (or Flask) host that serves the page, the plugin assets and the data API.
+- **Architecture** — [docs/architecture.html](docs/architecture.html): three diagrams (layers, data journey, rebuild lifecycle).
+- **Implementation & design** — [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) · [核心设计（中文）](docs/时间轴对齐的批量数据回放系统%20核心设计.md).
+- This README is the full reference (options, methods, internals).
+
 ## Features
 
 - 🎬 **Video-player-like playback** — play/pause, stop, speed control, progress slider
@@ -124,15 +135,21 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `tickLen` | `number` | `250` | Tick interval in ms |
 | `minTickMs` | `number` | `16` | Tick interval floor — keeps high speeds from flooding the tick loop |
 | `showControls` | `boolean` | `true` | Show playback controls (play/pause, stop, speed, loop) |
+| `showLoop` | `boolean` | `true` | Show the loop toggle in the playback bar (`loop` sets its initial state) |
 | `showTimeline` | `boolean` | `true` | Show timeline slider — when both are enabled they render together in a **single box** |
 | `controlBarPosition` | `string` | `'bottomleft'` | Corner of the combined playback + timeline box |
 | `showLegend` | `boolean` | `true` | Show speed color legend |
+| `legendTitle` | `string` | `'Speed (km/h)'` | Legend title |
+| `legendSteps` | `number` | `10` | Legend steps (also the default for `getLegend(steps)`) |
 | `showViewFollow` | `boolean` | `true` | Show view follow control |
 | `viewFollowTitle` | `string` | `'Follow:'` | Title of the follow control (doubles as its fold header) |
 | `viewFollowExpanded` | `boolean` | `false` | Start the follow panel unfolded |
 | `bearingTransform` | `(bearing: number) => number \| null` | pass-through | Transform bearing before rotation. Rotation is on by default; pass `null` to disable (slightly faster) |
 | `rotationOffset` | `number` | `0` | Degrees added to the bearing (e.g. `90` if the icon points right) |
 | `movingIcon` | `L.Icon \| L.DivIcon` | — | Custom icon for moving indicators |
+| `trackLayerOptions` | `object` | — | Track layer options: `{ defaultStyle }` — fallback style for segments without one |
+| `pointClusterOptions` | `object` | — | Point cluster options: `{ pointStyle, clusterStyle }` — circleMarker style and `leaflet.markercluster` options |
+| `staticLayerOptions` | `object` | — | Options passed to `L.geoJSON` for the static / event / custom element buckets (`{ style, pointToLayer, onEachFeature, … }`) |
 | `traveledStyle` | `object` | `{color:'#e74c3c',weight:4}` | Style for traveled route edge |
 | `untraveledStyle` | `object` | `{color:'#3498db',weight:4}` | Style for untraveled route edge |
 | `elementLabels` | `object` | English defaults | Labels for the per-element layers: `{track, points, static, events, background_nodes, traveled, untraveled, indicator}` |
@@ -174,6 +191,7 @@ Creates a new TrackReplay instance and adds all layers/controls to the map.
 | `mapDatum` | `'wgs84' \| 'gcj02'` | `'wgs84'` | Datum of the **active basemap** — `'gcj02'` for 高德/AMap tiles |
 | `baseLayers` | `{label, layer}[]` | — | Basemaps shown as the layer tree's radio group (host owns the layers) |
 | `baseLayersLabel` | `string` | `'Basemap'` | Label of that radio group |
+| `layerControlCollapsed` | `boolean` | `true` | Start the layer tree collapsed; pass `false` to expand it |
 
 #### Per-element layers
 
@@ -237,6 +255,7 @@ at once**, independent of the layer tree's per-object checkboxes:
 | `getCurrentTime()` | Get current time (ms) |
 | `getProgress()` | Get progress (0–1) |
 | `getState()` | Get state: `'playing'` / `'paused'` / `'stopped'` |
+| `getLegend(steps?)` | Current colour legend as `[{speed, color, label}]`, `steps + 1` entries (`steps` defaults to 10) |
 | `addDataset(fc, opts?)` | Add a dataset at runtime (merged by `layerPath`); returns its id |
 | `removeDataset(id)` | Remove exactly that dataset's parts |
 | `clearDatasets()` | Remove all datasets (the session stays alive) |
@@ -771,6 +790,9 @@ npm run build
 # Watch mode
 npm run dev
 
+# Check the user docs against the source (add --smoke to run the Hello World example)
+node _docs_check.mjs
+
 # Run Python demo server
 cd examples
 pip install fastapi uvicorn jinja2
@@ -846,11 +868,18 @@ the demo map.
 │       ├── EventBus.js          # Session event bus
 │       └── TimeUtils.js         # Timestamp formatting/parsing
 ├── examples/
-│   ├── server.py               # Python dev server
+│   ├── server.py               # Python demo host (FastAPI)
 │   └── templates/
 │       └── demo.html.jinja2    # Jinja2 template
+├── docs/
+│   ├── HUMAN-USAGE.zh.md / .en.md   # Getting-started guide
+│   ├── LLM-PROMPT.zh.md / .en.md    # Self-contained spec pack for other models
+│   ├── python-host/
+│   │   └── GUIDE.zh.md / .en.md     # Build a Python host
+│   ├── architecture.html            # Three architecture diagrams
+│   ├── IMPLEMENTATION.md            # Implementation notes
+│   └── 时间轴对齐的批量数据回放系统 核心设计.md  # Original design (Chinese)
 ├── dist/                       # Build output
-├── IMPLEMENTATION.md           # Implementation guide
 └── package.json
 ```
 

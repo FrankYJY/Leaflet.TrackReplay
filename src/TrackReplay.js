@@ -116,17 +116,30 @@ function collectSearchRecords(allLayers, elementKeys) {
  * @param {boolean} [options.loop=false]            - auto-restart when finished
  * @param {number} [options.tickLen=250]            - tick interval in ms
  * @param {boolean} [options.showControls=true]     - show default playback controls
+ * @param {boolean} [options.showLoop=true]         - show the loop toggle in the
+ *        playback bar (the `loop` option sets its initial state)
  * @param {boolean} [options.showTimeline=true]     - show timeline slider
  *        (when both are enabled they render together in one box)
  * @param {string} [options.controlBarPosition='bottomleft'] - corner of the combined box
  * @param {boolean} [options.showLegend=true]       - show color legend
+ * @param {string} [options.legendTitle='Speed (km/h)'] - legend title
+ * @param {number} [options.legendSteps=10]         - legend steps (also the
+ *        default for `replay.getLegend(steps)`)
  * @param {boolean} [options.showViewFollow=true]   - show view follow control
  * @param {string} [options.viewFollowTitle='Follow:'] - title of the follow control
  * @param {boolean} [options.viewFollowExpanded=false] - start the follow panel
  *        unfolded (its title is the fold header)
  * @param {Function} [options.bearingTransform]     - fn(bearing) => newBearing
- * @param {Object} [options.trackLayerOptions]      - options for track layer
- * @param {Object} [options.pointClusterOptions]    - options for point cluster
+ * @param {number} [options.rotationOffset=0]       - degrees added to the bearing
+ *        (e.g. 90 when the icon points right); rotation is on by default
+ * @param {Object} [options.trackLayerOptions]      - track layer options
+ *        ({ defaultStyle } — fallback style for segments without one)
+ * @param {Object} [options.pointClusterOptions]    - point cluster options
+ *        ({ pointStyle, clusterStyle } — circleMarker style and
+ *        leaflet.markercluster options)
+ * @param {Object} [options.staticLayerOptions]     - options passed to
+ *        `L.geoJSON` for the static/event/custom element buckets
+ *        ({ style, ... })
  * @param {Object} [options.traveledStyle]          - style for traveled route
  * @param {Object} [options.untraveledStyle]        - style for untraveled route
  * @param {Object} [options.movingIcon]             - custom icon for moving indicator
@@ -167,6 +180,8 @@ function collectSearchRecords(allLayers, elementKeys) {
  * @param {Object[]} [options.baseLayers]      - [{ label, layer }] basemaps for
  *        the layer tree's radio group (host owns the tile layers)
  * @param {string} [options.baseLayersLabel='Basemap'] - label of that group
+ * @param {boolean} [options.layerControlCollapsed=true] - start the layer tree
+ *        collapsed; pass false to expand it
  * @param {boolean} [options.showDataSource=false] - (session-level) show the
  *        data source panel: the current datasets (each with a remove button,
  *        plus clear-all) and the import channels (file picker, drag & drop

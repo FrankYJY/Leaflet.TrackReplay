@@ -10,7 +10,8 @@
   "style": "dist/leaflet-trackreplay.css",
   "files": [
     "dist/",
-    "src/"
+    "src/",
+    "docs/"
   ],
   "scripts": {
     "build": "rollup -c && node -e \"require('fs').copyFileSync('src/TrackReplay.css','dist/leaflet-trackreplay.css')\"",
